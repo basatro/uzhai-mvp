@@ -1,11 +1,31 @@
 import 'package:flutter/material.dart';
-import 'tech_home_screen.dart';
-import 'technician_signup_screen.dart';
+import 'technician_password_screen.dart';
 
-class TechnicianLoginScreen extends StatelessWidget {
-  const TechnicianLoginScreen({super.key});
+class TechnicianSignupScreen extends StatefulWidget {
+  const TechnicianSignupScreen({super.key});
 
+  @override
+  State<TechnicianSignupScreen> createState() =>
+      _TechnicianSignupScreenState();
+}
+
+class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
   static const Color neonOrange = Color(0xFFFF6B00);
+
+  String? selectedSpecialization;
+
+  final List<String> specializations = [
+    'Electrician',
+    'Plumber',
+    'Catering',
+    'Event / DJ',
+    'AC / Fridge',
+    'Painter',
+    'Pest Control',
+    'House Cleaning',
+    'Photographer',
+    'Others',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +40,7 @@ class TechnicianLoginScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Login",
+          "Sign Up",
           style: TextStyle(color: Colors.black),
         ),
       ),
@@ -28,80 +48,111 @@ class TechnicianLoginScreen extends StatelessWidget {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            const Text(
-              "Welcome Back,",
-              style: TextStyle(color: Colors.grey),
-            ),
-
-            const SizedBox(height: 24),
 
             Center(
               child: Image.asset(
                 'assets/uzhai_logo.png',
-                height: 200,
+                height: 180,
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 30),
 
-            // Email Field
             TextField(
-              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Enter Email",
+                hintText: "Username",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                    color: neonOrange,
-                    width: 2,
-                  ),
                 ),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Password Field
             TextField(
-              obscureText: true,
+              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Enter Password",
+                hintText: "Email",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
                 ),
-                focusedBorder: OutlineInputBorder(
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            TextField(
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                hintText: "Phone Number",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                    color: neonOrange,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            TextField(
+              decoration: InputDecoration(
+                hintText: "Location",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            DropdownButtonFormField<String>(
+              value: selectedSpecialization,
+              decoration: InputDecoration(
+                hintText: "Select Specialization",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              items: specializations.map((item) {
+                return DropdownMenuItem(
+                  value: item,
+                  child: Text(item),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  selectedSpecialization = value;
+                });
+              },
+            ),
+
+            const SizedBox(height: 30),
 
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pushReplacement(
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const TechHomeScreen(),
+                      builder: (_) =>
+                          const TechnicianPasswordScreen(),
                     ),
                   );
                 },
@@ -112,7 +163,7 @@ class TechnicianLoginScreen extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  "Login",
+                  "Next",
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -120,35 +171,6 @@ class TechnicianLoginScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  "Don't have an account? ",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => TechnicianSignupScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "Sign Up",
-                    style: TextStyle(
-                      color: neonOrange,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
