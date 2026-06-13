@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'customer_signup_screen.dart';
-import 'customer_home_screen.dart';
 
-class CustomerLoginScreen extends StatelessWidget {
-  const CustomerLoginScreen({super.key});
+class CustomerPasswordScreen extends StatelessWidget {
+  const CustomerPasswordScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +14,7 @@ class CustomerLoginScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Login",
+          "Create Password",
           style: TextStyle(color: Colors.black),
         ),
       ),
@@ -25,8 +23,9 @@ class CustomerLoginScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             const Text(
-              "Welcome Back,",
+              "Secure Your Account",
               style: TextStyle(color: Colors.grey),
             ),
 
@@ -35,17 +34,16 @@ class CustomerLoginScreen extends StatelessWidget {
             Center(
               child: Image.asset(
                 'assets/uzhai_logo.png',
-                height: 200,
+                height: 180,
               ),
             ),
 
             const SizedBox(height: 32),
 
-            // Email Field
             TextField(
-              keyboardType: TextInputType.emailAddress,
+              obscureText: true,
               decoration: InputDecoration(
-                hintText: "Enter Email",
+                hintText: "Password",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -57,11 +55,10 @@ class CustomerLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Password Field
             TextField(
               obscureText: true,
               decoration: InputDecoration(
-                hintText: "Enter Password",
+                hintText: "Confirm Password",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -71,55 +68,21 @@ class CustomerLoginScreen extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
                 onPressed: () {
-                    Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                    builder: (context) => const CustomerHomeScreen(),
-                    ),
-                  );
+                  // TODO:
+                  // Firebase Sign Up
+                  // Navigate to Home Screen
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E88E5),
                 ),
-                child: const Text("Login"),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    "Don't have an account? ",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                          Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                          builder: (_) => CustomerSignupScreen(),
-                            ),
-                          );
-                    },
-                    child: const Text(
-                      "Sign Up",
-                      style: TextStyle(
-                        color: Color(0xFF1E88E5),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
+                child: const Text("Create Account"),
               ),
             ),
           ],

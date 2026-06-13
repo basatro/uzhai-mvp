@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'customer_signup_screen.dart';
-import 'customer_home_screen.dart';
+import 'customer_password_screen.dart';
 
-class CustomerLoginScreen extends StatelessWidget {
-  const CustomerLoginScreen({super.key});
+class CustomerSignupScreen extends StatelessWidget {
+  const CustomerSignupScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -16,18 +15,21 @@ class CustomerLoginScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Login",
+          "Sign Up",
           style: TextStyle(color: Colors.black),
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             const Text(
-              "Welcome Back,",
-              style: TextStyle(color: Colors.grey),
+              "Create Your Account",
+              style: TextStyle(
+                color: Colors.grey,
+              ),
             ),
 
             const SizedBox(height: 24),
@@ -35,17 +37,16 @@ class CustomerLoginScreen extends StatelessWidget {
             Center(
               child: Image.asset(
                 'assets/uzhai_logo.png',
-                height: 200,
+                height: 180,
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 30),
 
-            // Email Field
+            // Username
             TextField(
-              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Enter Email",
+                hintText: "Username",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -57,11 +58,11 @@ class CustomerLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Password Field
+            // Email
             TextField(
-              obscureText: true,
+              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Enter Password",
+                hintText: "Email",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -71,24 +72,60 @@ class CustomerLoginScreen extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // Phone Number
+            TextField(
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                hintText: "Phone Number",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Location
+            TextField(
+              decoration: InputDecoration(
+                hintText: "Location",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
 
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
                 onPressed: () {
-                    Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                    builder: (context) => const CustomerHomeScreen(),
+                    Navigator.push(
+                     context,
+                     MaterialPageRoute(
+                     builder: (context) => const CustomerPasswordScreen(),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E88E5),
                 ),
-                child: const Text("Login"),
+                child: const Text(
+                  "Next",
+                  style: TextStyle(
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
 
@@ -98,27 +135,27 @@ class CustomerLoginScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+
                   const Text(
-                    "Don't have an account? ",
-                    style: TextStyle(color: Colors.grey),
+                    "Already have an account? ",
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
                   ),
+
                   GestureDetector(
                     onTap: () {
-                          Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                          builder: (_) => CustomerSignupScreen(),
-                            ),
-                          );
+                      Navigator.pop(context);
                     },
                     child: const Text(
-                      "Sign Up",
+                      "Login",
                       style: TextStyle(
                         color: Color(0xFF1E88E5),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
+
                 ],
               ),
             ),
