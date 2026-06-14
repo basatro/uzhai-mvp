@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "211095129844",
+    "project_id": "uzhai-mvp",
+    "storage_bucket": "uzhai-mvp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211095129844:android:40378dbf3927bb20d618a1",
+        "android_client_info": {
+          "package_name": "com.example.uzhai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgWgCm_bg01zFRtiNHaWLQB768RRhohkI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

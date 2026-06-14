@@ -1,8 +1,61 @@
 import 'package:flutter/material.dart';
 import 'customer_password_screen.dart';
 
-class CustomerSignupScreen extends StatelessWidget {
+class CustomerSignupScreen extends StatefulWidget {
   const CustomerSignupScreen({super.key});
+
+  @override
+  State<CustomerSignupScreen> createState() => _CustomerSignupScreenState();
+}
+
+class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
+
+  final TextEditingController usernameController =
+      TextEditingController();
+
+  final TextEditingController emailController =
+      TextEditingController();
+
+  final TextEditingController phoneController =
+      TextEditingController();
+
+  final TextEditingController locationController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    usernameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    locationController.dispose();
+    super.dispose();
+  }
+
+  void goToPasswordScreen() {
+    if (usernameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        phoneController.text.isEmpty ||
+        locationController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill all fields"),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CustomerPasswordScreen(
+          username: usernameController.text.trim(),
+          email: emailController.text.trim(),
+          phone: phoneController.text.trim(),
+          location: locationController.text.trim(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +64,10 @@ class CustomerSignupScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.black,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -45,6 +101,7 @@ class CustomerSignupScreen extends StatelessWidget {
 
             // Username
             TextField(
+              controller: usernameController,
               decoration: InputDecoration(
                 hintText: "Username",
                 filled: true,
@@ -60,6 +117,7 @@ class CustomerSignupScreen extends StatelessWidget {
 
             // Email
             TextField(
+              controller: emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 hintText: "Email",
@@ -74,8 +132,9 @@ class CustomerSignupScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Phone Number
+            // Phone
             TextField(
+              controller: phoneController,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 hintText: "Phone Number",
@@ -92,6 +151,7 @@ class CustomerSignupScreen extends StatelessWidget {
 
             // Location
             TextField(
+              controller: locationController,
               decoration: InputDecoration(
                 hintText: "Location",
                 filled: true,
@@ -109,14 +169,7 @@ class CustomerSignupScreen extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                    Navigator.push(
-                     context,
-                     MaterialPageRoute(
-                     builder: (context) => const CustomerPasswordScreen(),
-                    ),
-                  );
-                },
+                onPressed: goToPasswordScreen,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E88E5),
                 ),
