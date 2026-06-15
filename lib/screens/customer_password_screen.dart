@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'customer_home_screen.dart';
 
 class CustomerPasswordScreen extends StatefulWidget {
@@ -61,11 +62,24 @@ Future<void> createAccount() async {
 
   try {
 
-    await FirebaseAuth.instance
-        .createUserWithEmailAndPassword(
+    UserCredential userCredential =
+        await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
       email: widget.email,
       password: passwordController.text.trim(),
     );
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userCredential.user!.uid)
+        .set({
+      'role': 'customer',
+      'username': widget.username,
+      'email': widget.email,
+      'phone': widget.phone,
+      'location': widget.location,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
 
     Navigator.pushReplacement(
       context,
@@ -78,7 +92,18 @@ Future<void> createAccount() async {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(e.message ?? "Signup Failed"),
+        content: Text(
+          e.message ?? "Signup Failed",
+        ),
+      ),
+    );
+  } catch (e) {
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "Error: $e",
+        ),
       ),
     );
   }
