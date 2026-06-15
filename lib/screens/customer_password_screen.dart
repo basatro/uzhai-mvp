@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'customer_home_screen.dart';
 
 class CustomerPasswordScreen extends StatefulWidget {
@@ -36,27 +37,35 @@ class _CustomerPasswordScreenState
     super.dispose();
   }
 
-  void createAccount() {
+Future<void> createAccount() async {
 
-    if (passwordController.text.isEmpty ||
-        confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter password"),
-        ),
-      );
-      return;
-    }
+  if (passwordController.text.isEmpty ||
+      confirmPasswordController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please enter password"),
+      ),
+    );
+    return;
+  }
 
-    if (passwordController.text !=
-        confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Passwords do not match"),
-        ),
-      );
-      return;
-    }
+  if (passwordController.text !=
+      confirmPasswordController.text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Passwords do not match"),
+      ),
+    );
+    return;
+  }
+
+  try {
+
+    await FirebaseAuth.instance
+        .createUserWithEmailAndPassword(
+      email: widget.email,
+      password: passwordController.text.trim(),
+    );
 
     Navigator.pushReplacement(
       context,
@@ -64,7 +73,16 @@ class _CustomerPasswordScreenState
         builder: (_) => const CustomerHomeScreen(),
       ),
     );
+
+  } on FirebaseAuthException catch (e) {
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.message ?? "Signup Failed"),
+      ),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
