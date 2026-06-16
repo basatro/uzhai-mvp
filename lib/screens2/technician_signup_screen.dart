@@ -9,8 +9,22 @@ class TechnicianSignupScreen extends StatefulWidget {
       _TechnicianSignupScreenState();
 }
 
-class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
+class _TechnicianSignupScreenState
+    extends State<TechnicianSignupScreen> {
+
   static const Color neonOrange = Color(0xFFFF6B00);
+
+  final TextEditingController usernameController =
+      TextEditingController();
+
+  final TextEditingController emailController =
+      TextEditingController();
+
+  final TextEditingController phoneController =
+      TextEditingController();
+
+  final TextEditingController locationController =
+      TextEditingController();
 
   String? selectedSpecialization;
 
@@ -28,6 +42,58 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
   ];
 
   @override
+  void dispose() {
+    usernameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    locationController.dispose();
+    super.dispose();
+  }
+
+  void goToPasswordScreen() {
+
+    if (usernameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        phoneController.text.isEmpty ||
+        locationController.text.isEmpty) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Please fill all fields",
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (selectedSpecialization == null) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Please select specialization",
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TechnicianPasswordScreen(
+          username: usernameController.text.trim(),
+          email: emailController.text.trim(),
+          phone: phoneController.text.trim(),
+          location: locationController.text.trim(),
+          specialization: selectedSpecialization!,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
@@ -36,12 +102,17 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.black,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           "Sign Up",
-          style: TextStyle(color: Colors.black),
+          style: TextStyle(
+            color: Colors.black,
+          ),
         ),
       ),
 
@@ -60,6 +131,7 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
             const SizedBox(height: 30),
 
             TextField(
+              controller: usernameController,
               decoration: InputDecoration(
                 hintText: "Username",
                 filled: true,
@@ -74,6 +146,7 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
             const SizedBox(height: 16),
 
             TextField(
+              controller: emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 hintText: "Email",
@@ -89,6 +162,7 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
             const SizedBox(height: 16),
 
             TextField(
+              controller: phoneController,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 hintText: "Phone Number",
@@ -104,6 +178,7 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
             const SizedBox(height: 16),
 
             TextField(
+              controller: locationController,
               decoration: InputDecoration(
                 hintText: "Location",
                 filled: true,
@@ -147,15 +222,7 @@ class _TechnicianSignupScreenState extends State<TechnicianSignupScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const TechnicianPasswordScreen(),
-                    ),
-                  );
-                },
+                onPressed: goToPasswordScreen,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: neonOrange,
                   shape: RoundedRectangleBorder(

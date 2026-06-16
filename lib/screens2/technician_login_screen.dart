@@ -1,11 +1,75 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'tech_home_screen.dart';
 import 'technician_signup_screen.dart';
 
-class TechnicianLoginScreen extends StatelessWidget {
+class TechnicianLoginScreen extends StatefulWidget {
   const TechnicianLoginScreen({super.key});
 
+  @override
+  State<TechnicianLoginScreen> createState() =>
+      _TechnicianLoginScreenState();
+}
+
+class _TechnicianLoginScreenState
+    extends State<TechnicianLoginScreen> {
+
   static const Color neonOrange = Color(0xFFFF6B00);
+
+  final TextEditingController emailController =
+      TextEditingController();
+
+  final TextEditingController passwordController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> loginUser() async {
+
+    if (emailController.text.isEmpty ||
+        passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Please enter email and password",
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const TechHomeScreen(),
+        ),
+        (route) => false,
+      );
+
+    } on FirebaseAuthException catch (e) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ?? "Login Failed",
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +80,10 @@ class TechnicianLoginScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.black,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -47,8 +114,8 @@ class TechnicianLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 32),
 
-            // Email Field
             TextField(
+              controller: emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 hintText: "Enter Email",
@@ -70,8 +137,8 @@ class TechnicianLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Password Field
             TextField(
+              controller: passwordController,
               obscureText: true,
               decoration: InputDecoration(
                 hintText: "Enter Password",
@@ -97,14 +164,7 @@ class TechnicianLoginScreen extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TechHomeScreen(),
-                    ),
-                  );
-                },
+                onPressed: loginUser,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: neonOrange,
                   shape: RoundedRectangleBorder(
@@ -127,16 +187,21 @@ class TechnicianLoginScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+
                 const Text(
                   "Don't have an account? ",
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
                 ),
+
                 GestureDetector(
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => TechnicianSignupScreen(),
+                        builder: (_) =>
+                            const TechnicianSignupScreen(),
                       ),
                     );
                   },

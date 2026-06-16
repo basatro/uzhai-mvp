@@ -1,9 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'customer_signup_screen.dart';
 import 'customer_home_screen.dart';
 
-class CustomerLoginScreen extends StatelessWidget {
+class CustomerLoginScreen extends StatefulWidget {
   const CustomerLoginScreen({super.key});
+
+  @override
+  State<CustomerLoginScreen> createState() =>
+      _CustomerLoginScreenState();
+}
+
+class _CustomerLoginScreenState
+    extends State<CustomerLoginScreen> {
+
+  final TextEditingController emailController =
+      TextEditingController();
+
+  final TextEditingController passwordController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> loginUser() async {
+
+    if (emailController.text.isEmpty ||
+        passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill all fields"),
+        ),
+      );
+      return;
+    }
+
+    try {
+
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const CustomerHomeScreen(),
+        ),
+      );
+
+    } on FirebaseAuthException catch (e) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ?? "Login Failed",
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +73,10 @@ class CustomerLoginScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.black,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -25,6 +89,7 @@ class CustomerLoginScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             const Text(
               "Welcome Back,",
               style: TextStyle(color: Colors.grey),
@@ -41,8 +106,8 @@ class CustomerLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 32),
 
-            // Email Field
             TextField(
+              controller: emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 hintText: "Enter Email",
@@ -57,8 +122,8 @@ class CustomerLoginScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Password Field
             TextField(
+              controller: passwordController,
               obscureText: true,
               decoration: InputDecoration(
                 hintText: "Enter Password",
@@ -77,18 +142,13 @@ class CustomerLoginScreen extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                    Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                    builder: (context) => const CustomerHomeScreen(),
-                    ),
-                  );
-                },
+                onPressed: loginUser,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E88E5),
                 ),
-                child: const Text("Login"),
+                child: const Text(
+                  "Login",
+                ),
               ),
             ),
 
@@ -98,18 +158,23 @@ class CustomerLoginScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+
                   const Text(
                     "Don't have an account? ",
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
                   ),
+
                   GestureDetector(
                     onTap: () {
-                          Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                          builder: (_) => CustomerSignupScreen(),
-                            ),
-                          );
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const CustomerSignupScreen(),
+                        ),
+                      );
                     },
                     child: const Text(
                       "Sign Up",
@@ -119,6 +184,7 @@ class CustomerLoginScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+
                 ],
               ),
             ),
