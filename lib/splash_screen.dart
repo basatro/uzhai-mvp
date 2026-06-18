@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'screens/role_selection_screen.dart';
 import 'screens/customer_home_screen.dart';
@@ -30,6 +31,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (user == null) {
 
+      if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -37,12 +40,70 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       );
 
-    } else {
+      return;
+    }
+
+    try {
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!doc.exists) {
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RoleSelectionScreen(),
+          ),
+        );
+
+        return;
+      }
+
+      final role = doc['role'];
+
+      if (!mounted) return;
+
+      if (role == "customer") {
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CustomerHomeScreen(),
+          ),
+        );
+
+      } else if (role == "technician") {
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TechHomeScreen(),
+          ),
+        );
+
+      } else {
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RoleSelectionScreen(),
+          ),
+        );
+      }
+
+    } catch (e) {
+
+      if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const CustomerHomeScreen(),
+          builder: (_) => const RoleSelectionScreen(),
         ),
       );
     }

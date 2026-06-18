@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/technician_bottom_nav.dart';
+import '../screens/role_selection_screen.dart';
 
 // ✅ GLOBAL COLOR (FIXED)
 const Color neonOrange = Color(0xFFFF6B00);
@@ -14,6 +17,44 @@ class TechProfileScreen extends StatefulWidget {
 class _TechProfileScreenState extends State<TechProfileScreen> {
   bool notificationsEnabled = true;
   bool availabilityEnabled = true;
+
+  // Step 2: Variables
+  String username = "";
+  String phone = "";
+  String specialization = "";
+  bool isLoading = true;
+
+  // Step 3: initState
+  @override
+  void initState() {
+    super.initState();
+    loadUserData();
+  }
+
+  // Step 4: Firestore Function
+  Future<void> loadUserData() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (doc.exists) {
+        setState(() {
+          username = doc['username'] ?? '';
+          phone = doc['phone'] ?? '';
+          specialization = doc['specialization'] ?? '';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print(e);
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,188 +76,195 @@ class _TechProfileScreenState extends State<TechProfileScreen> {
       ),
 
       // 📄 BODY
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-
-          /// 👤 PROFILE HEADER
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: _box(),
-            child: Row(
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: neonOrange))
+          : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                const CircleAvatar(
-                  radius: 28,
-                  backgroundColor: neonOrange,
-                  child: Text(
-                    "R",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
 
-                const SizedBox(width: 16),
-
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                /// 👤 PROFILE HEADER
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: _box(),
+                  child: Row(
                     children: [
-                      Text(
-                        "Ramesh Kumar",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                      // Step 5: Dynamic Avatar
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: neonOrange,
+                        child: Text(
+                          username.isNotEmpty
+                              ? username[0].toUpperCase()
+                              : "T",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        "Plumber",
-                        style: TextStyle(color: Colors.grey),
+
+                      const SizedBox(width: 16),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Step 6: Dynamic Data
+                            Text(
+                              username,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              specialization,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              phone,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        "+91 98765 43210",
-                        style: TextStyle(color: Colors.grey),
-                      ),
+
+                      ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: neonOrange,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text("Edit"),
+                      )
                     ],
                   ),
                 ),
 
-                ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: neonOrange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                const SizedBox(height: 24),
+
+                _sectionTitle("Work Settings"),
+
+                _switchTile(
+                  icon: Icons.toggle_on,
+                  title: "Available for Jobs",
+                  value: availabilityEnabled,
+                  onChanged: (v) {
+                    setState(() => availabilityEnabled = v);
+                  },
+                ),
+
+                _tile(
+                  icon: Icons.location_on,
+                  title: "Working Radius",
+                  subtitle: "Up to 12 km",
+                  trailing: const Text(
+                    "12 km",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+
+                _tile(
+                  icon: Icons.access_time,
+                  title: "Working Hours",
+                  subtitle: "9:00 AM – 7:00 PM",
+                ),
+
+                const SizedBox(height: 24),
+
+                _sectionTitle("General"),
+
+                _tile(
+                  icon: Icons.language,
+                  title: "Language",
+                  subtitle: "English / Tamil",
+                  trailing: const Text(
+                    "English",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+
+                _switchTile(
+                  icon: Icons.notifications,
+                  title: "Notifications",
+                  value: notificationsEnabled,
+                  onChanged: (v) {
+                    setState(() => notificationsEnabled = v);
+                  },
+                ),
+
+                _tile(
+                  icon: Icons.verified,
+                  title: "Verification Status",
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: neonOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      "Verified",
+                      style: TextStyle(
+                        color: neonOrange,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  child: const Text("Edit"),
-                )
+                ),
+
+                const SizedBox(height: 24),
+
+                _sectionTitle("Support"),
+
+                _tile(icon: Icons.help_outline, title: "Help & Support"),
+                _tile(
+                  icon: Icons.phone,
+                  title: "Contact UZHAI Support",
+                  subtitle: "Phone / WhatsApp / Email",
+                ),
+
+                const SizedBox(height: 24),
+
+                _sectionTitle("App Info"),
+
+                _tile(
+                  icon: Icons.info_outline,
+                  title: "App Version",
+                  subtitle: "v1.0.0",
+                  showArrow: false,
+                ),
+
+                const SizedBox(height: 24),
+
+                /// 🚪 LOGOUT
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => _showLogoutDialog(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                    child: const Text(
+                      "Logout",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          _sectionTitle("Work Settings"),
-
-          _switchTile(
-            icon: Icons.toggle_on,
-            title: "Available for Jobs",
-            value: availabilityEnabled,
-            onChanged: (v) {
-              setState(() => availabilityEnabled = v);
-            },
-          ),
-
-          _tile(
-            icon: Icons.location_on,
-            title: "Working Radius",
-            subtitle: "Up to 12 km",
-            trailing: const Text(
-              "12 km",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-
-          _tile(
-            icon: Icons.access_time,
-            title: "Working Hours",
-            subtitle: "9:00 AM – 7:00 PM",
-          ),
-
-          const SizedBox(height: 24),
-
-          _sectionTitle("General"),
-
-          _tile(
-            icon: Icons.language,
-            title: "Language",
-            subtitle: "English / Tamil",
-            trailing: const Text(
-              "English",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-
-          _switchTile(
-            icon: Icons.notifications,
-            title: "Notifications",
-            value: notificationsEnabled,
-            onChanged: (v) {
-              setState(() => notificationsEnabled = v);
-            },
-          ),
-
-          _tile(
-            icon: Icons.verified,
-            title: "Verification Status",
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: neonOrange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                "Verified",
-                style: TextStyle(
-                  color: neonOrange,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          _sectionTitle("Support"),
-
-          _tile(icon: Icons.help_outline, title: "Help & Support"),
-          _tile(
-            icon: Icons.phone,
-            title: "Contact UZHAI Support",
-            subtitle: "Phone / WhatsApp / Email",
-          ),
-
-          const SizedBox(height: 24),
-
-          _sectionTitle("App Info"),
-
-          _tile(
-            icon: Icons.info_outline,
-            title: "App Version",
-            subtitle: "v1.0.0",
-            showArrow: false,
-          ),
-
-          const SizedBox(height: 24),
-
-          /// 🚪 LOGOUT
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: () => _showLogoutDialog(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-              child: const Text(
-                "Logout",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
 
       // ⬇️ TECH NAV BAR (Profile = index 3)
       bottomNavigationBar: const TechnicianBottomNav(currentIndex: 3),
@@ -237,8 +285,19 @@ class _TechProfileScreenState extends State<TechProfileScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text("Cancel"),
           ),
+          // Step 7: Fixed Logout
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RoleSelectionScreen(),
+                ),
+                (route) => false,
+              );
+            },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("Yes, Logout"),
           ),
