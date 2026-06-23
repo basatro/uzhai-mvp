@@ -60,29 +60,98 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
     }
   }
 
-  Future<void> postJob() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+Future<void> postJob() async {
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    await FirebaseFirestore.instance.collection('jobs').add({
-      'customerId': user.uid,
-      'customerName': userDoc['username'],
-      'category': selectedService,
-      'title': titleController.text.trim(),
-      'description': descriptionController.text.trim(),
-      'location': location,
-      'status': 'open',
-      'createdAt': Timestamp.now(),
-    });
-
-    if (!mounted) return;
-    Navigator.pop(context);
+  // Service validation
+  if (selectedService == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please select a service"),
+      ),
+    );
+    return;
   }
+
+  // Title validation
+  if (titleController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Job title is required"),
+      ),
+    );
+    return;
+  }
+
+  // Location validation
+  if (location.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Location is required"),
+      ),
+    );
+    return;
+  }
+
+  // Description / Image / Audio validation
+  // For now only description exists
+  // Later replace imageAdded and audioAdded
+  bool imageAdded = false;
+  bool audioAdded = false;
+
+  if (descriptionController.text.trim().isEmpty &&
+      !imageAdded &&
+      !audioAdded) {
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Add Description, Images or Voice Note",
+        ),
+      ),
+    );
+    return;
+  }
+
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user == null) return;
+
+  final userDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .get();
+
+  await FirebaseFirestore.instance
+      .collection('jobs')
+      .add({
+
+    'customerId': user.uid,
+
+    'customerName': userDoc['username'],
+
+    'category': selectedService,
+
+    'title': titleController.text.trim(),
+
+    'description': descriptionController.text.trim(),
+
+    'location': location,
+
+    'status': 'open',
+
+    'createdAt': Timestamp.now(),
+  });
+
+  if (!mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text("Job Posted Successfully"),
+    ),
+  );
+
+  Navigator.pop(context);
+}
 
   @override
   Widget build(BuildContext context) {
