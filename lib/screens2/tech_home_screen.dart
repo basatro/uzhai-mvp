@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/technician_bottom_nav.dart';
 import 'tech_quote_screen.dart';
 
@@ -12,7 +14,23 @@ class TechHomeScreen extends StatefulWidget {
 class _TechHomeScreenState extends State<TechHomeScreen> {
   static const Color neonOrange = Color(0xFFFF6B00);
 
-  bool isActive = true;
+  String? specialization;
+
+  @override
+  void initState() {
+    super.initState();
+    loadTechnician();
+  }
+
+  Future<void> loadTechnician() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    specialization = doc['specialization'];
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,59 +56,62 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
             color: neonOrange,
             onPressed: () {},
           ),
-          Switch(
-            value: isActive,
-            activeColor: neonOrange,
-            onChanged: (value) {
-              setState(() => isActive = value);
-            },
-          ),
         ],
       ),
 
-      // 📄 BODY
-      body: isActive
-          ? ListView(
-              padding: const EdgeInsets.all(16),
-              children: const [
-                PlumberJobCard(
-                  customerName: "Suresh Kumar",
-                  area: "Anna Nagar",
-                  distance: "2.3 km",
-                  time: "Today · 3:00 – 5:00 PM",
-                  problem: "Kitchen tap leaking continuously",
-                  images: [
-                    "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea",
-                  ],
-                ),
-                PlumberJobCard(
-                  customerName: "Meena",
-                  area: "Vadapalani",
-                  distance: "4.1 km",
-                  time: "Tomorrow · 9:00 – 11:00 AM",
-                  problem: "Bathroom pipe blockage",
-                  images: [
-                    "https://images.unsplash.com/photo-1584622650111-993a426fbf0a",
-                  ],
-                ),
-                PlumberJobCard(
-                  customerName: "Arun",
-                  area: "Kodambakkam",
-                  distance: "3.0 km",
-                  time: "Today · Evening",
-                  problem: "Water tank overflow issue",
-                  images: [
-                    "https://images.unsplash.com/photo-1621905252507-b35492cc74b4",
-                    "https://images.unsplash.com/photo-1503387762-592deb58ef4e",
-                  ],
-                ),
-              ],
+      body: specialization == null
+          ? const Center(
+              child: CircularProgressIndicator(),
             )
-          : const Center(
-              child: Text(
-                "You are offline",
-                style: TextStyle(color: Colors.grey),
-              ),
+          : StreamBuilder<QuerySnapshot>(
+              // 🔍 FIX 1 — Removed orderBy() to test if composite index is the issue
+              stream: FirebaseFirestore.instance
+                  .collection('jobs')
+                  .where('category', isEqualTo: specialization)
+                  .where('status', isEqualTo: 'open')
+                  .snapshots(),
+              builder: (context, snapshot) {
+
+                // 🔍 FIX 2 — Debug prints to inspect what Firestore is returning
+                print("Specialization: $specialization");
+                print("Docs found: ${snapshot.data?.docs.length}");
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      "No $specialization Jobs Available",
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    final job = snapshot.data!.docs[index];
+
+                    // 🔍 FIX 2 — Print each document's full data
+                    print(job.data());
+
+                    return JobCard(
+                      customerName: job['customerName'],
+                      area: job['location'],
+                      distance: "",
+                      time: "",
+                      problem: job['description'],
+                      images: const [],
+                      category: job['category'],
+                    );
+                  },
+                );
+              },
             ),
 
       // ⬇️ TECHNICIAN NAV BAR
@@ -101,15 +122,16 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 
 //////////////////// JOB CARD ////////////////////
 
-class PlumberJobCard extends StatelessWidget {
+class JobCard extends StatelessWidget {
   final String customerName;
   final String area;
   final String distance;
   final String time;
   final String problem;
   final List<String> images;
+  final String category;
 
-  const PlumberJobCard({
+  const JobCard({
     super.key,
     required this.customerName,
     required this.area,
@@ -117,6 +139,7 @@ class PlumberJobCard extends StatelessWidget {
     required this.time,
     required this.problem,
     required this.images,
+    required this.category,
   });
 
   static const Color neonOrange = Color(0xFFFF6B00);
@@ -135,37 +158,38 @@ class PlumberJobCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-          /// 🖼️ JOB IMAGES (1:1 Instagram style)
-          SizedBox(
-            height: 220,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                return AspectRatio(
-                  aspectRatio: 1 / 1,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.network(
-                      images[index],
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.image_not_supported,
-                          size: 40,
-                          color: Colors.grey,
+          // Images only render if non-empty
+          if (images.isNotEmpty)
+            SizedBox(
+              height: 220,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: images.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  return AspectRatio(
+                    aspectRatio: 1,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.network(
+                        images[index],
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
 
-          const SizedBox(height: 16),
+          if (images.isNotEmpty) const SizedBox(height: 16),
 
           /// 👤 CUSTOMER + 📏 DISTANCE
           Row(
@@ -178,10 +202,11 @@ class PlumberJobCard extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              Text(
-                distance,
-                style: const TextStyle(color: Colors.grey),
-              ),
+              if (distance.isNotEmpty)
+                Text(
+                  distance,
+                  style: const TextStyle(color: Colors.grey),
+                ),
             ],
           ),
 
@@ -199,9 +224,9 @@ class PlumberJobCard extends StatelessWidget {
               color: neonOrange.withOpacity(0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Text(
-              "Plumber",
-              style: TextStyle(
+            child: Text(
+              category,
+              style: const TextStyle(
                 color: neonOrange,
                 fontWeight: FontWeight.bold,
               ),
@@ -210,10 +235,11 @@ class PlumberJobCard extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          /// 🕒 TIME
-          Text(time, style: const TextStyle(color: Colors.grey)),
+          /// 🕒 TIME — only show if non-empty
+          if (time.isNotEmpty)
+            Text(time, style: const TextStyle(color: Colors.grey)),
 
-          const SizedBox(height: 8),
+          if (time.isNotEmpty) const SizedBox(height: 8),
 
           /// 📝 PROBLEM
           Text(
