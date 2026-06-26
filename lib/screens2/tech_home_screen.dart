@@ -144,6 +144,55 @@ class JobCard extends StatelessWidget {
 
   static const Color neonOrange = Color(0xFFFF6B00);
 
+  // ✅ ADDED — Skip dialog method
+  void _showSkipDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text("Skip Job"),
+          content: const Text(
+            "Are you sure you want to skip this job?\n\nThis job won't appear in your feed again.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Job skipped successfully"),
+                  ),
+                );
+                // TODO:
+                // Later we'll update Firestore:
+                //
+                // skippedBy: [technicianUID]
+                //
+                // so this technician never sees this job again.
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text(
+                "Skip",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -250,19 +299,22 @@ class JobCard extends StatelessWidget {
 
           const SizedBox(height: 18),
 
-          /// ❌ DENY | ✅ ACCEPT
+          /// ⏭️ SKIP | ✅ ACCEPT
           Row(
             children: [
               Expanded(
+                // ✅ CHANGED — "Deny" replaced with "Skip" that opens dialog
                 child: OutlinedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    _showSkipDialog(context);
+                  },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.grey),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(26),
                     ),
                   ),
-                  child: const Text("Deny"),
+                  child: const Text("Skip"),
                 ),
               ),
               const SizedBox(width: 14),
