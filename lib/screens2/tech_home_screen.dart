@@ -100,7 +100,10 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                     // 🔍 FIX 2 — Print each document's full data
                     print(job.data());
 
+                    // ✅ STEP 1 — jobId and customerId now passed to JobCard
                     return JobCard(
+                      jobId: job.id,
+                      customerId: job['customerId'],
                       customerName: job['customerName'],
                       area: job['location'],
                       distance: "",
@@ -123,6 +126,9 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 //////////////////// JOB CARD ////////////////////
 
 class JobCard extends StatelessWidget {
+  // ✅ STEP 2 — jobId and customerId added above customerName
+  final String jobId;
+  final String customerId;
   final String customerName;
   final String area;
   final String distance;
@@ -131,8 +137,11 @@ class JobCard extends StatelessWidget {
   final List<String> images;
   final String category;
 
+  // ✅ STEP 3 — Constructor updated with jobId and customerId
   const JobCard({
     super.key,
+    required this.jobId,
+    required this.customerId,
     required this.customerName,
     required this.area,
     required this.distance,
@@ -144,7 +153,6 @@ class JobCard extends StatelessWidget {
 
   static const Color neonOrange = Color(0xFFFF6B00);
 
-  // ✅ ADDED — Skip dialog method
   void _showSkipDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -303,7 +311,6 @@ class JobCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                // ✅ CHANGED — "Deny" replaced with "Skip" that opens dialog
                 child: OutlinedButton(
                   onPressed: () {
                     _showSkipDialog(context);
@@ -325,13 +332,15 @@ class JobCard extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => TechQuoteScreen(
-                          customerName: customerName,
-                          area: area,
-                          distance: distance,
-                          time: time,
-                          problem: problem,
-                          images: images,
-                        ),
+  jobId: jobId,
+  customerId: customerId,
+  customerName: customerName,
+  area: area,
+  distance: distance,
+  time: time,
+  problem: problem,
+  images: images,
+)
                       ),
                     );
                   },

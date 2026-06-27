@@ -1,8 +1,13 @@
+// ✅ STEP 5 — Firebase imports added
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class TechQuoteScreen extends StatelessWidget {
+class TechQuoteScreen extends StatefulWidget {
   const TechQuoteScreen({
     super.key,
+    required this.jobId,
+    required this.customerId,
     required this.customerName,
     required this.area,
     required this.distance,
@@ -11,6 +16,8 @@ class TechQuoteScreen extends StatelessWidget {
     required this.images,
   });
 
+  final String jobId;
+  final String customerId;
   final String customerName;
   final String area;
   final String distance;
@@ -21,7 +28,86 @@ class TechQuoteScreen extends StatelessWidget {
   static const Color neonOrange = Color(0xFFFF6B00);
 
   @override
+  State<TechQuoteScreen> createState() => _TechQuoteScreenState();
+}
+
+class _TechQuoteScreenState extends State<TechQuoteScreen> {
+
+  final TextEditingController quoteController = TextEditingController();
+  final TextEditingController messageController = TextEditingController();
+  bool isLoading = false;
+
+  @override
+  void dispose() {
+    quoteController.dispose();
+    messageController.dispose();
+    super.dispose();
+  }
+
+  // ✅ STEP 6 — submitQuote() function
+  Future<void> submitQuote() async {
+    if (quoteController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter your quote"),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final technician = FirebaseAuth.instance.currentUser!;
+      final technicianDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(technician.uid)
+          .get();
+
+      await FirebaseFirestore.instance
+          .collection('quotes')
+          .add({
+        'jobId': widget.jobId,
+        'customerId': widget.customerId,
+        'technicianId': technician.uid,
+        'technicianName': technicianDoc['username'],
+        'amount': double.parse(quoteController.text),
+        'message': messageController.text.trim(),
+        'status': 'pending',
+        'createdAt': Timestamp.now(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Quote Submitted Successfully"),
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+
+    // Debug prints (temporary)
+    print("Job ID: ${widget.jobId}");
+    print("Customer ID: ${widget.customerId}");
+
     return Scaffold(
       backgroundColor: Colors.white,
 
@@ -42,7 +128,6 @@ class TechQuoteScreen extends StatelessWidget {
         ),
       ),
 
-      // ✅ CHANGE 5: Fixed bottom button — body is now Column with Expanded scroll + pinned button
       body: Column(
         children: [
           Expanded(
@@ -52,13 +137,12 @@ class TechQuoteScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
 
-                  // ✅ CHANGE 4: Only show image row if images list is non-empty
-                  if (images.isNotEmpty)
+                  if (widget.images.isNotEmpty)
                     SizedBox(
                       height: 240,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        itemCount: images.length,
+                        itemCount: widget.images.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           return AspectRatio(
@@ -66,7 +150,7 @@ class TechQuoteScreen extends StatelessWidget {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
                               child: Image.network(
-                                images[index],
+                                widget.images[index],
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Container(
                                   color: Colors.grey.shade200,
@@ -83,19 +167,18 @@ class TechQuoteScreen extends StatelessWidget {
                       ),
                     ),
 
-                  if (images.isNotEmpty) const SizedBox(height: 24),
+                  if (widget.images.isNotEmpty) const SizedBox(height: 24),
 
                   // 👤 CUSTOMER INFO
-                  _infoRow("Customer", customerName),
-                  _infoRow("Area", area),
+                  _infoRow("Customer", widget.customerName),
+                  _infoRow("Area", widget.area),
 
-                  // ✅ CHANGE 6: Only show distance/time if non-empty
-                  if (distance.isNotEmpty) _infoRow("Distance", distance),
-                  if (time.isNotEmpty) _infoRow("Customer Time", time),
+                  if (widget.distance.isNotEmpty) _infoRow("Distance", widget.distance),
+                  if (widget.time.isNotEmpty) _infoRow("Customer Time", widget.time),
 
                   const SizedBox(height: 18),
 
-                  // ✅ CHANGE 3: Problem description inside a styled card container
+                  // 📝 PROBLEM DESCRIPTION
                   const Text(
                     "Problem Description",
                     style: TextStyle(fontWeight: FontWeight.bold),
@@ -109,7 +192,7 @@ class TechQuoteScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
-                      problem,
+                      widget.problem,
                       style: const TextStyle(color: Colors.black87),
                     ),
                   ),
@@ -123,6 +206,7 @@ class TechQuoteScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   TextField(
+                    controller: quoteController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: "Enter amount",
@@ -135,7 +219,7 @@ class TechQuoteScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // ✅ CHANGE 2: Message field replaces alternate date/time
+                  // 💬 MESSAGE (OPTIONAL)
                   const SizedBox(height: 20),
                   const Text(
                     "Message (Optional)",
@@ -143,6 +227,7 @@ class TechQuoteScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   TextField(
+                    controller: messageController,
                     maxLines: 3,
                     decoration: InputDecoration(
                       hintText: "Example: Can arrive within 30 minutes.",
@@ -156,14 +241,12 @@ class TechQuoteScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 16),
-
-                  // ✅ CHANGE 1: Alternate date/time section removed entirely
                 ],
               ),
             ),
           ),
 
-          // ✅ CHANGE 5: Pinned bottom button (Swiggy/Zomato/Uber style)
+          // ✅ PINNED BOTTOM BUTTON
           SafeArea(
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -171,23 +254,32 @@ class TechQuoteScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context); // UI only — wire up Firestore later
-                  },
+                  // ✅ STEP 7 — Connected to submitQuote, disabled while loading
+                  onPressed: isLoading ? null : submitQuote,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: neonOrange,
+                    backgroundColor: TechQuoteScreen.neonOrange,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(26),
                     ),
                   ),
-                  child: const Text(
-                    "Send Quote",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  // ✅ STEP 8 — Shows spinner while loading
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          "Submit Quote",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -220,5 +312,3 @@ class TechQuoteScreen extends StatelessWidget {
     );
   }
 }
-
-// ✅ CHANGE 1: _DatePickerField and _TimePickerField classes removed entirely
