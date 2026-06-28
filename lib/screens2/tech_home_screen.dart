@@ -64,7 +64,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
               child: CircularProgressIndicator(),
             )
           : StreamBuilder<QuerySnapshot>(
-              // 🔍 FIX 1 — Removed orderBy() to test if composite index is the issue
               stream: FirebaseFirestore.instance
                   .collection('jobs')
                   .where('category', isEqualTo: specialization)
@@ -72,7 +71,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
 
-                // 🔍 FIX 2 — Debug prints to inspect what Firestore is returning
                 print("Specialization: $specialization");
                 print("Docs found: ${snapshot.data?.docs.length}");
 
@@ -82,7 +80,24 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                // ✅ STEP 7 — Updated empty check with skippedBy filter
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                final uid = FirebaseAuth.instance.currentUser!.uid;
+
+                // ✅ STEP 6 — Filter out skipped jobs
+                final jobs = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final skipped =
+                      List<String>.from(data['skippedBy'] ?? []);
+                  return !skipped.contains(uid);
+                }).toList();
+
+                if (jobs.isEmpty) {
                   return Center(
                     child: Text(
                       "No $specialization Jobs Available",
@@ -93,14 +108,15 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: snapshot.data!.docs.length,
+                  // ✅ STEP 6 — Use filtered jobs list
+                  itemCount: jobs.length,
                   itemBuilder: (context, index) {
-                    final job = snapshot.data!.docs[index];
+                    // ✅ STEP 6 — Use filtered jobs list
+                    final job = jobs[index];
 
-                    // 🔍 FIX 2 — Print each document's full data
                     print(job.data());
 
-                    // ✅ STEP 1 — jobId and customerId now passed to JobCard
+                    // ✅ STEP 2 — jobId passed to JobCard
                     return JobCard(
                       jobId: job.id,
                       customerId: job['customerId'],
@@ -126,7 +142,7 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 //////////////////// JOB CARD ////////////////////
 
 class JobCard extends StatelessWidget {
-  // ✅ STEP 2 — jobId and customerId added above customerName
+  // ✅ STEP 2 & 3 — jobId and customerId fields
   final String jobId;
   final String customerId;
   final String customerName;
@@ -137,9 +153,9 @@ class JobCard extends StatelessWidget {
   final List<String> images;
   final String category;
 
-  // ✅ STEP 3 — Constructor updated with jobId and customerId
   const JobCard({
     super.key,
+    // ✅ STEP 3 — jobId added to constructor
     required this.jobId,
     required this.customerId,
     required this.customerName,
@@ -152,6 +168,17 @@ class JobCard extends StatelessWidget {
   });
 
   static const Color neonOrange = Color(0xFFFF6B00);
+
+  // ✅ STEP 4 — Skip function writes to Firestore
+  Future<void> skipJob() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .update({
+      'skippedBy': FieldValue.arrayUnion([uid]),
+    });
+  }
 
   void _showSkipDialog(BuildContext context) {
     showDialog(
@@ -173,19 +200,10 @@ class JobCard extends StatelessWidget {
               child: const Text("Cancel"),
             ),
             ElevatedButton(
-              onPressed: () {
+              // ✅ STEP 5 — Skip dialog calls skipJob() and closes
+              onPressed: () async {
+                await skipJob();
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Job skipped successfully"),
-                  ),
-                );
-                // TODO:
-                // Later we'll update Firestore:
-                //
-                // skippedBy: [technicianUID]
-                //
-                // so this technician never sees this job again.
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -332,15 +350,15 @@ class JobCard extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => TechQuoteScreen(
-  jobId: jobId,
-  customerId: customerId,
-  customerName: customerName,
-  area: area,
-  distance: distance,
-  time: time,
-  problem: problem,
-  images: images,
-)
+                          jobId: jobId,
+                          customerId: customerId,
+                          customerName: customerName,
+                          area: area,
+                          distance: distance,
+                          time: time,
+                          problem: problem,
+                          images: images,
+                        ),
                       ),
                     );
                   },

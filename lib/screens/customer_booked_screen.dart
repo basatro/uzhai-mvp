@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/customer_bottom_nav.dart';
+// ✅ STEP 1 — CustomerQuotesScreen import added
+import 'customer_quotes_screen.dart';
 
 const Color primaryBlue = Color(0xFF1E88E5);
 
@@ -49,7 +53,7 @@ class _CustomerBookedScreenState extends State<CustomerBookedScreen>
           tabs: const [
             Tab(text: "Pending"),
             Tab(text: "Active"),
-            Tab(text: "Completed"),
+            Tab(text: "History"),
             Tab(text: "Cancelled"),
           ],
         ),
@@ -60,7 +64,7 @@ class _CustomerBookedScreenState extends State<CustomerBookedScreen>
         children: const [
           _PendingTab(),
           _ActiveTab(),
-          _CompletedTab(),
+          _HistoryTab(),
           _CancelledTab(),
         ],
       ),
@@ -77,20 +81,43 @@ class _PendingTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _JobCard(status: "Pending"),
-        SizedBox(height: 16),
-        Text(
-          "Quotes received",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        SizedBox(height: 12),
-        _QuoteCard(name: "Ramesh", price: "₹450", rating: "4.5"),
-        _QuoteCard(name: "Suresh", price: "₹400", rating: "4.2"),
-        _QuoteCard(name: "Arun", price: "₹480", rating: "4.8"),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'open')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Pending Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job = snapshot.data!.docs[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _PendingJobCard(
+                jobId: job.id,
+                title: job['title'],
+                location: job['location'],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -105,25 +132,21 @@ class _ActiveTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _JobCard(status: "Active"),
-
-        const SizedBox(height: 16),
-
-        const Text(
-          "Technician",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-
-        const SizedBox(height: 8),
-
         Container(
           padding: const EdgeInsets.all(16),
           decoration: _box(),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Ramesh Kumar",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                "Technician",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 8),
+              Text(
+                "Ramesh Kumar",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 4),
               Text("⭐ 4.5  •  Plumber"),
               SizedBox(height: 8),
@@ -134,49 +157,27 @@ class _ActiveTab extends StatelessWidget {
 
         const SizedBox(height: 20),
 
-        // 📞 CALL + 💬 CHAT
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.call),
-                label: const Text("Call"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.chat),
+            label: const Text("Chat"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryBlue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.chat),
-                label: const Text("Chat"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryBlue,
-                  side: const BorderSide(color: primaryBlue),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // ❌ CANCEL BOOKING
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: () {
-              // UI only – later confirmation dialog
-            },
+            onPressed: () {},
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
               shape: RoundedRectangleBorder(
@@ -184,7 +185,7 @@ class _ActiveTab extends StatelessWidget {
               ),
             ),
             child: const Text(
-              "Cancel Booking",
+              "Cancel",
               style: TextStyle(
                 color: Colors.red,
                 fontWeight: FontWeight.bold,
@@ -197,10 +198,10 @@ class _ActiveTab extends StatelessWidget {
   }
 }
 
-//////////////////// COMPLETED ////////////////////
+//////////////////// HISTORY ////////////////////
 
-class _CompletedTab extends StatelessWidget {
-  const _CompletedTab();
+class _HistoryTab extends StatelessWidget {
+  const _HistoryTab();
 
   @override
   Widget build(BuildContext context) {
@@ -208,9 +209,8 @@ class _CompletedTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: const [
         _HistoryCard(
-          service: "Plumber",
-          name: "Ramesh",
-          date: "12 Sep 2025",
+          name: "Ramesh Kumar",
+          date: "28 June 2025",
           amount: "₹450",
           status: "Completed",
         ),
@@ -230,11 +230,12 @@ class _CancelledTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: const [
         _HistoryCard(
-          service: "Electrician",
-          name: "Suresh",
-          date: "10 Sep 2025",
-          amount: "—",
+          name: "Suresh Kumar",
+          date: "",
+          amount: "",
           status: "Cancelled",
+          cancelledBy: "Customer",
+          cancelReason: "Selected another technician",
         ),
       ],
     );
@@ -243,9 +244,17 @@ class _CancelledTab extends StatelessWidget {
 
 //////////////////// REUSABLE ////////////////////
 
-class _JobCard extends StatelessWidget {
-  final String status;
-  const _JobCard({required this.status});
+class _PendingJobCard extends StatelessWidget {
+  final String jobId;
+  final String title;
+  final String location;
+
+  const _PendingJobCard({
+    super.key,
+    required this.jobId,
+    required this.title,
+    required this.location,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -255,70 +264,56 @@ class _JobCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Plumber • Kitchen tap leakage",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          const Text("Today • 3:00 PM – 5:00 PM"),
-          const SizedBox(height: 6),
           Text(
-            status,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: primaryBlue,
-            ),
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuoteCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final String rating;
-
-  const _QuoteCard({
-    required this.name,
-    required this.price,
-    required this.rating,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text("⭐ $rating"),
-            ],
-          ),
-          Column(
-            children: [
-              Text(
-                price,
+          const SizedBox(height: 6),
+          Text(location),
+          const SizedBox(height: 6),
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('quotes')
+                .where('jobId', isEqualTo: jobId)
+                .get(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Text("Loading...");
+              }
+              return Text(
+                "${snapshot.data!.docs.length} Quotes Received",
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 6),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  minimumSize: const Size(80, 32),
+                  color: primaryBlue,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: const Text("Select"),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              // ✅ STEP 2 — Navigator.push() to CustomerQuotesScreen
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CustomerQuotesScreen(
+                      jobId: jobId,
+                      title: title,
+                      location: location,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
               ),
-            ],
+              child: const Text(
+                "View Quotes",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
           ),
         ],
       ),
@@ -327,18 +322,20 @@ class _QuoteCard extends StatelessWidget {
 }
 
 class _HistoryCard extends StatelessWidget {
-  final String service;
   final String name;
   final String date;
   final String amount;
   final String status;
+  final String? cancelledBy;
+  final String? cancelReason;
 
   const _HistoryCard({
-    required this.service,
     required this.name,
     required this.date,
     required this.amount,
     required this.status,
+    this.cancelledBy,
+    this.cancelReason,
   });
 
   @override
@@ -351,13 +348,20 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "$service • $name",
+            name,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Text(date),
+          if (amount.isNotEmpty) Text(amount),
+          if (status == "Completed") ...[
+            const SizedBox(height: 8),
+            const Text("⭐⭐⭐⭐⭐ 4.8"),
+          ],
           const SizedBox(height: 4),
-          Text(amount),
+          if (date.isNotEmpty)
+            Text(
+              status == "Completed" ? "Completed on $date" : date,
+            ),
           const SizedBox(height: 6),
           Text(
             status,
@@ -366,6 +370,22 @@ class _HistoryCard extends StatelessWidget {
               color: status == "Completed" ? Colors.green : Colors.red,
             ),
           ),
+          if (status == "Cancelled" &&
+              cancelledBy != null &&
+              cancelReason != null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              "Cancelled By",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(cancelledBy!),
+            const SizedBox(height: 8),
+            const Text(
+              "Reason",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(cancelReason!),
+          ],
         ],
       ),
     );
