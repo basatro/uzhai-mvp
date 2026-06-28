@@ -17,7 +17,7 @@ class _TechMyJobsScreenState extends State<TechMyJobsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -48,8 +48,9 @@ class _TechMyJobsScreenState extends State<TechMyJobsScreen>
           unselectedLabelColor: Colors.grey,
           indicatorColor: neonOrange,
           tabs: const [
+            Tab(text: "Pending"),
             Tab(text: "Active"),
-            Tab(text: "Completed"),
+            Tab(text: "History"),   // STEP 1 — renamed from "Completed"
             Tab(text: "Cancelled"),
           ],
         ),
@@ -59,6 +60,7 @@ class _TechMyJobsScreenState extends State<TechMyJobsScreen>
       body: TabBarView(
         controller: _tabController,
         children: const [
+          _PendingJobs(),
           _ActiveJobs(),
           _CompletedJobs(),
           _CancelledJobs(),
@@ -67,6 +69,26 @@ class _TechMyJobsScreenState extends State<TechMyJobsScreen>
 
       // ⬇️ TECH NAV BAR (My Jobs = index 1)
       bottomNavigationBar: const TechnicianBottomNav(currentIndex: 1),
+    );
+  }
+}
+
+//////////////// PENDING //////////////////
+
+class _PendingJobs extends StatelessWidget {
+  const _PendingJobs();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: const [
+        _PendingJobTile(
+          customer: "Ramesh Kumar",
+          area: "Anna Nagar",
+          quote: "₹450",
+        ),
+      ],
     );
   }
 }
@@ -84,7 +106,6 @@ class _ActiveJobs extends StatelessWidget {
         _ActiveJobTile(
           customer: "Ramesh Kumar",
           area: "Anna Nagar",
-          time: "Today · 3:00 – 5:00 PM",
         ),
       ],
     );
@@ -101,11 +122,14 @@ class _CompletedJobs extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: const [
+        // STEP 3 — added amount + rating
         _JobTile(
           customer: "Meena",
           area: "Vadapalani",
-          time: "12 Sep 2025",
+          time: "28 June 2026",
           status: "Completed",
+          amount: "₹450",
+          rating: "4.8",
         ),
       ],
     );
@@ -122,28 +146,100 @@ class _CancelledJobs extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: const [
+        // STEP 4 — added cancelledBy + cancelReason
         _JobTile(
           customer: "Suresh",
           area: "Kodambakkam",
-          time: "10 Sep 2025",
+          time: "",
           status: "Cancelled",
+          cancelledBy: "Customer",
+          cancelReason: "Selected another technician",
         ),
       ],
     );
   }
 }
 
-//////////////// ACTIVE JOB TILE (WITH CANCEL) //////////////////
+//////////////// PENDING JOB TILE //////////////////
+
+class _PendingJobTile extends StatelessWidget {
+  final String customer;
+  final String area;
+  final String quote;
+
+  const _PendingJobTile({
+    required this.customer,
+    required this.area,
+    required this.quote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            customer,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            area,
+            style: const TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Your Quote : $quote",
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Text(
+              "Waiting for customer response",
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+//////////////// ACTIVE JOB TILE (STEP 2 — UPGRADED) //////////////////
 
 class _ActiveJobTile extends StatelessWidget {
   final String customer;
   final String area;
-  final String time;
+
+  static const Color neonOrange = Color(0xFFFF6B00);
 
   const _ActiveJobTile({
     required this.customer,
     required this.area,
-    required this.time,
   });
 
   @override
@@ -173,14 +269,9 @@ class _ActiveJobTile extends StatelessWidget {
           // 📍 AREA
           Text(area, style: const TextStyle(color: Colors.grey)),
 
-          const SizedBox(height: 6),
-
-          // 🕒 TIME
-          Text(time, style: const TextStyle(color: Colors.grey)),
-
           const SizedBox(height: 12),
 
-          // 🟢 STATUS
+          // 🟢 STATUS CHIP
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -196,9 +287,39 @@ class _ActiveJobTile extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 16),
+          // 📷 Scan QR — full width
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                // TODO:
+                // Navigate to QR Scanner Screen
+              },
+              icon: const Icon(
+                Icons.qr_code_scanner,
+                color: Colors.white,
+              ),
+              label: const Text(
+                "Scan QR",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: neonOrange,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+            ),
+          ),
 
-          // ❌ CANCEL BUTTON
+          const SizedBox(height: 12),
+
+          // ❌ CANCEL BUTTON — STEP 2: label shortened to "Cancel"
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -212,7 +333,7 @@ class _ActiveJobTile extends StatelessWidget {
                 ),
               ),
               child: const Text(
-                "Cancel Job",
+                "Cancel",
                 style: TextStyle(
                   color: Colors.red,
                   fontWeight: FontWeight.bold,
@@ -226,19 +347,29 @@ class _ActiveJobTile extends StatelessWidget {
   }
 }
 
-//////////////// GENERIC JOB TILE //////////////////
+//////////////// GENERIC JOB TILE (STEPS 5 + 6 + 7) //////////////////
 
 class _JobTile extends StatelessWidget {
   final String customer;
   final String area;
   final String time;
   final String status;
+  // STEP 5 — optional fields
+  final String? amount;
+  final String? rating;
+  final String? cancelledBy;
+  final String? cancelReason;
 
+  // STEP 5 — updated constructor
   const _JobTile({
     required this.customer,
     required this.area,
     required this.time,
     required this.status,
+    this.amount,
+    this.rating,
+    this.cancelledBy,
+    this.cancelReason,
   });
 
   @override
@@ -266,8 +397,6 @@ class _JobTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(area, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 6),
-          Text(time, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -283,6 +412,45 @@ class _JobTile extends StatelessWidget {
               ),
             ),
           ),
+
+          // STEP 6 — History details
+          if (status == "Completed") ...[
+            const SizedBox(height: 12),
+            Text(
+              "Earned : ${amount ?? ""}",
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text("⭐ ${rating ?? ""}"),
+            const SizedBox(height: 8),
+            Text(
+              "Completed on $time",
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+
+          // STEP 7 — Cancelled details
+          if (status == "Cancelled") ...[
+            const SizedBox(height: 12),
+            Text(
+              "Cancelled By",
+              style: TextStyle(color: Colors.grey),
+            ),
+            Text(
+              cancelledBy ?? "",
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Reason",
+              style: TextStyle(color: Colors.grey),
+            ),
+            Text(cancelReason ?? ""),
+          ],
         ],
       ),
     );
