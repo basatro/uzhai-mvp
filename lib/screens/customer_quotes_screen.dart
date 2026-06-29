@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CustomerQuotesScreen extends StatelessWidget {
   final String jobId;
@@ -31,73 +32,92 @@ class CustomerQuotesScreen extends StatelessWidget {
         ),
       ),
 
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-
-          /// Job Card
-          Container(
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('quotes')
+            .where('jobId', isEqualTo: jobId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text("No quotes received yet"),
+            );
+          }
+          final quotes = snapshot.data!.docs;
+          return ListView(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            children: [
 
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
+              /// Job Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
 
-                const SizedBox(height: 6),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
 
-                Text(
-                  location,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                  ),
+                    const SizedBox(height: 6),
+
+                    Text(
+                      location,
+                      style: const TextStyle(
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                  ],
                 ),
+              ),
 
-              ],
-            ),
-          ),
+              const SizedBox(height: 20),
 
-          const SizedBox(height: 20),
+              const Text(
+                "Quotes Received",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
 
-          const Text(
-            "Quotes Received",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+              const SizedBox(height: 16),
 
-          const SizedBox(height: 16),
+              ...quotes.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: QuoteCard(
+                    quoteId: doc.id,
+                    jobId: jobId,
+                    technicianId: data['technicianId'],
+                    technicianName: data['technicianName'],
+                    rating: "4.8",
+                    completedJobs: "235",
+                    reliability: "9.6",
+                    distance: "1.4 km",
+                    amount: "₹${data['amount']}",
+                  ),
+                );
+              }).toList(),
 
-          const QuoteCard(
-            technicianName: "Muthupandi",
-            rating: "4.8",
-            completedJobs: "235",
-            amount: "₹260",
-            message: "I'll be there in 30 mins.",
-          ),
-
-          const SizedBox(height: 14),
-
-          const QuoteCard(
-            technicianName: "Rahul",
-            rating: "4.6",
-            completedJobs: "190",
-            amount: "₹300",
-            message: "Available this evening.",
-          ),
-
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -177,23 +197,74 @@ Future<bool?> showSelectDialog(
   );
 }
 
+//////////////////// ASSIGN TECHNICIAN ////////////////////
+
+Future<void> assignTechnician({
+  required BuildContext context,
+  required String jobId,
+  required String quoteId,
+  required String technicianId,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+
+  // 1. Assign selected quote
+  await firestore.collection('quotes').doc(quoteId).update({
+    'status': 'assigned',
+  });
+
+  // 2. Update job
+  await firestore.collection('jobs').doc(jobId).update({
+    'status': 'assigned',
+    'selectedQuoteId': quoteId,
+    'selectedTechnicianId': technicianId,
+  });
+
+  // 3. Reject remaining quotes
+  final otherQuotes = await firestore
+      .collection('quotes')
+      .where('jobId', isEqualTo: jobId)
+      .get();
+
+  for (var doc in otherQuotes.docs) {
+    if (doc.id != quoteId) {
+      await doc.reference.update({
+        'status': 'rejected',
+      });
+    }
+  }
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text("Technician Assigned Successfully"),
+    ),
+  );
+}
+
 //////////////////// QUOTE CARD ////////////////////
 
 class QuoteCard extends StatelessWidget {
 
+  final String quoteId;
+  final String jobId;
+  final String technicianId;
   final String technicianName;
   final String rating;
   final String completedJobs;
+  final String reliability;
+  final String distance;
   final String amount;
-  final String message;
 
   const QuoteCard({
     super.key,
+    required this.quoteId,
+    required this.jobId,
+    required this.technicianId,
     required this.technicianName,
     required this.rating,
     required this.completedJobs,
     required this.amount,
-    required this.message,
+    required this.distance,
+    required this.reliability,
   });
 
   static const Color primaryBlue = Color(0xFF1E88E5);
@@ -226,8 +297,17 @@ class QuoteCard extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          Text(
-            "⭐ $rating • $completedJobs Jobs",
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("⭐ $rating"),
+              const SizedBox(height: 6),
+              Text("🛡️ $reliability /10 Reliable"),
+              const SizedBox(height: 6),
+              Text("📍 $distance"),
+              const SizedBox(height: 6),
+              Text("🔧 $completedJobs Jobs"),
+            ],
           ),
 
           const SizedBox(height: 12),
@@ -241,15 +321,6 @@ class QuoteCard extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 12),
-
-          Text(
-            message,
-            style: const TextStyle(
-              color: Colors.grey,
-            ),
-          ),
-
           const SizedBox(height: 18),
 
           SizedBox(
@@ -258,7 +329,6 @@ class QuoteCard extends StatelessWidget {
 
             child: ElevatedButton(
 
-              // ✅ Updated — Shows confirm dialog before selecting technician
               onPressed: () async {
                 final confirmed = await showSelectDialog(
                   context,
@@ -266,10 +336,12 @@ class QuoteCard extends StatelessWidget {
                   amount: amount,
                 );
                 if (confirmed != true) return;
-                // Next:
-                // Update Firestore
-                // Move Job → Active
-                // Reject remaining quotes
+                await assignTechnician(
+                  context: context,
+                  jobId: jobId,
+                  quoteId: quoteId,
+                  technicianId: technicianId,
+                );
               },
 
               style: ElevatedButton.styleFrom(
