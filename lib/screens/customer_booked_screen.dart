@@ -158,6 +158,7 @@ class _ActiveTab extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: _ActiveJobCard(
+                jobId: job.id,
                 title: job['title'],
                 location: job['location'],
                 technicianId: job['selectedTechnicianId'],
@@ -198,18 +199,52 @@ class _CancelledTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _HistoryCard(
-          name: "Suresh Kumar",
-          date: "",
-          amount: "",
-          status: "Cancelled",
-          cancelledBy: "Customer",
-          cancelReason: "Selected another technician",
-        ),
-      ],
+
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'cancelled')
+          .snapshots(),
+
+      builder: (context, snapshot) {
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Cancelled Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+
+            final data =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            return _HistoryCard(
+              name: data['title'] ?? "",
+              date: "",
+              amount: "",
+              status: "Cancelled",
+              cancelledBy: data['cancelledBy'] ?? "",
+              cancelledTechnicianName:
+                  data['cancelledTechnicianName'] ?? "",
+              cancelReason: data['cancelReason'] ?? "",
+            );
+
+          },
+        );
+      },
     );
   }
 }
@@ -294,12 +329,14 @@ class _PendingJobCard extends StatelessWidget {
 }
 
 class _ActiveJobCard extends StatelessWidget {
+  final String jobId;
   final String title;
   final String location;
   final String technicianId;
 
   const _ActiveJobCard({
     super.key,
+    required this.jobId,
     required this.title,
     required this.location,
     required this.technicianId,
@@ -397,8 +434,43 @@ class _ActiveJobCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () {
-                    // TODO : Cancel Booking
+                  onPressed: () async {
+
+                    final controller = TextEditingController();
+
+                    final confirm = await showCustomerCancelDialog(
+                      context,
+                      controller,
+                    );
+
+                    if (confirm != true) return;
+
+                    // ✅ STEP 4 — Customer cancellation now fully
+                    // deletes the job and its quotes instead of
+                    // marking them as "cancelled".
+                    final jobRef = FirebaseFirestore.instance
+                        .collection('jobs')
+                        .doc(jobId);
+
+                    final quotes = await FirebaseFirestore.instance
+                        .collection('quotes')
+                        .where('jobId', isEqualTo: jobId)
+                        .get();
+
+                    for (final doc in quotes.docs) {
+                      await doc.reference.delete();
+                    }
+
+                    await jobRef.delete();
+
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Booking Cancelled"),
+                      ),
+                    );
+
                   },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(
@@ -421,12 +493,66 @@ class _ActiveJobCard extends StatelessWidget {
   }
 }
 
+//////////////////// CUSTOMER CANCEL DIALOG (STEP 4) ////////////////////
+
+Future<bool?> showCustomerCancelDialog(
+  BuildContext context,
+  TextEditingController controller,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Cancel Booking"),
+
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+
+          const Text("Reason (Optional)"),
+
+          const SizedBox(height: 10),
+
+          TextField(
+            controller: controller,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+            ),
+          ),
+
+        ],
+      ),
+
+      actions: [
+
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Back"),
+        ),
+
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            "Cancel Booking",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+
+      ],
+    ),
+  );
+}
+
 class _HistoryCard extends StatelessWidget {
   final String name;
   final String date;
   final String amount;
   final String status;
   final String? cancelledBy;
+  final String? cancelledTechnicianName;
   final String? cancelReason;
 
   const _HistoryCard({
@@ -435,6 +561,7 @@ class _HistoryCard extends StatelessWidget {
     required this.amount,
     required this.status,
     this.cancelledBy,
+    this.cancelledTechnicianName,
     this.cancelReason,
   });
 
@@ -470,21 +597,45 @@ class _HistoryCard extends StatelessWidget {
               color: status == "Completed" ? Colors.green : Colors.red,
             ),
           ),
-          if (status == "Cancelled" &&
-              cancelledBy != null &&
-              cancelReason != null) ...[
+          if (status == "Cancelled" && cancelledBy != null) ...[
             const SizedBox(height: 8),
+
             const Text(
               "Cancelled By",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
+
             Text(cancelledBy!),
-            const SizedBox(height: 8),
-            const Text(
-              "Reason",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text(cancelReason!),
+
+            // ✅ STEP 2 — Show technician name only when the
+            // technician was the one who cancelled the job.
+            if (cancelledBy == "Technician" &&
+                cancelledTechnicianName != null &&
+                cancelledTechnicianName!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                "Technician",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                cancelledTechnicianName ?? "",
+              ),
+            ],
+
+            if ((cancelReason ?? "").trim().isNotEmpty) ...[
+
+              const SizedBox(height: 8),
+
+              const Text(
+                "Reason",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+
+              Text(cancelReason!),
+
+            ],
           ],
         ],
       ),

@@ -154,6 +154,7 @@ class _ActiveJobs extends StatelessWidget {
             final quote = snapshot.data!.docs[index];
             return _ActiveQuoteCard(
               jobId: quote['jobId'],
+              quoteId: quote.id,
             );
           },
         );
@@ -193,19 +194,38 @@ class _CancelledJobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        // STEP 4 — added cancelledBy + cancelReason
-        _JobTile(
-          customer: "Suresh",
-          area: "Kodambakkam",
-          time: "",
-          status: "Cancelled",
-          cancelledBy: "Customer",
-          cancelReason: "Selected another technician",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('quotes')
+          .where('technicianId', isEqualTo: uid)
+          .where('status', isEqualTo: 'cancelled')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Cancelled Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final quote = snapshot.data!.docs[index];
+            return _CancelledQuoteCard(
+              jobId: quote['jobId'],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -321,17 +341,89 @@ class _PendingQuoteCard extends StatelessWidget {
   }
 }
 
-//////////////// ACTIVE JOB TILE (STEP 2 — UPGRADED) //////////////////
+//////////////// CANCEL DIALOG (STEP 2) //////////////////
+
+Future<bool?> showTechnicianCancelDialog(
+  BuildContext context,
+  TextEditingController controller,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+
+      title: const Text(
+        "Cancel Job",
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+
+          const Text(
+            "Reason (Optional)",
+          ),
+
+          const SizedBox(height: 10),
+
+          TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: "Enter reason...",
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+
+        ],
+      ),
+
+      actions: [
+
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context, false);
+          },
+          child: const Text("Back"),
+        ),
+
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, true);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          child: const Text(
+            "Cancel Job",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+
+      ],
+    ),
+  );
+}
+
+//////////////// ACTIVE JOB TILE (STEP 2 — UPGRADED + STEPS 6/7) //////////////////
 
 class _ActiveJobTile extends StatelessWidget {
   final String customer;
   final String area;
+
+  final String quoteId;
+  final String jobId;
 
   static const Color neonOrange = Color(0xFFFF6B00);
 
   const _ActiveJobTile({
     required this.customer,
     required this.area,
+    required this.quoteId,
+    required this.jobId,
   });
 
   @override
@@ -415,8 +507,74 @@ class _ActiveJobTile extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () {
-                // UI only – later confirmation dialog
+              onPressed: () async {
+
+                final controller = TextEditingController();
+
+                final confirm = await showTechnicianCancelDialog(
+                  context,
+                  controller,
+                );
+
+                if (confirm != true) return;
+
+                // STEP 3 — get technician name
+                final techDoc = await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser!.uid)
+                    .get();
+
+                final technicianName = techDoc['username'];
+
+                // STEP 4 — reopen job, store cancel metadata
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .update({
+                  // reopen job
+                  'status': 'open',
+                  // remember who cancelled
+                  'cancelledBy': 'Technician',
+                  'cancelledTechnicianName': technicianName,
+                  'cancelReason': controller.text.trim(),
+                  // remove assigned technician
+                  'selectedTechnicianId': '',
+                  'selectedQuoteId': '',
+                });
+
+                // STEP 5 — reopen all quotes for this job
+                final quotes = await FirebaseFirestore.instance
+                    .collection('quotes')
+                    .where('jobId', isEqualTo: jobId)
+                    .get();
+
+                for (final doc in quotes.docs) {
+                  await doc.reference.update({
+                    'status': 'pending',
+                  });
+                }
+
+                // STEP 6 — skip technician who cancelled
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .update({
+                  'skippedBy': FieldValue.arrayUnion([
+                    FirebaseAuth.instance.currentUser!.uid
+                  ])
+                });
+
+                // STEP 7 — snackbar
+                if (!context.mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      "Job cancelled successfully",
+                    ),
+                  ),
+                );
+
               },
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.red),
@@ -443,10 +601,12 @@ class _ActiveJobTile extends StatelessWidget {
 
 class _ActiveQuoteCard extends StatelessWidget {
   final String jobId;
+  final String quoteId;
 
   const _ActiveQuoteCard({
     super.key,
     required this.jobId,
+    required this.quoteId,
   });
 
   @override
@@ -469,9 +629,57 @@ class _ActiveQuoteCard extends StatelessWidget {
 
         final job = snapshot.data!.data() as Map<String, dynamic>;
 
+
+
         return _ActiveJobTile(
           customer: job['customerName'],
           area: job['location'],
+          quoteId: quoteId,
+          jobId: jobId,
+        );
+      },
+    );
+  }
+}
+
+//////////////// CANCELLED QUOTE CARD (fetches job by jobId) //////////////////
+
+class _CancelledQuoteCard extends StatelessWidget {
+  final String jobId;
+
+  const _CancelledQuoteCard({
+    super.key,
+    required this.jobId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final job =
+            snapshot.data!.data() as Map<String, dynamic>;
+
+        return _JobTile(
+          customer: job['customerName'] ?? "Unknown",
+          area: job['location'] ?? "",
+          time: "",
+          status: "Cancelled",
+          cancelledBy: job['cancelledBy'],
+          cancelReason: job['cancelReason'],
         );
       },
     );
@@ -565,7 +773,7 @@ class _JobTile extends StatelessWidget {
           // STEP 7 — Cancelled details
           if (status == "Cancelled") ...[
             const SizedBox(height: 12),
-            Text(
+            const Text(
               "Cancelled By",
               style: TextStyle(color: Colors.grey),
             ),
@@ -575,12 +783,15 @@ class _JobTile extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              "Reason",
-              style: TextStyle(color: Colors.grey),
-            ),
-            Text(cancelReason ?? ""),
+            if (cancelReason != null &&
+                cancelReason!.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                "Reason",
+                style: TextStyle(color: Colors.grey),
+              ),
+              Text(cancelReason!),
+            ],
           ],
         ],
       ),
