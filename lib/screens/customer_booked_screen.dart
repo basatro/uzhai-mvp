@@ -129,71 +129,43 @@ class _ActiveTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'assigned')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Active Jobs"),
+          );
+        }
+
+        return ListView.builder(
           padding: const EdgeInsets.all(16),
-          decoration: _box(),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Technician",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job = snapshot.data!.docs[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _ActiveJobCard(
+                title: job['title'],
+                location: job['location'],
+                technicianId: job['selectedTechnicianId'],
               ),
-              SizedBox(height: 8),
-              Text(
-                "Ramesh Kumar",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 4),
-              Text("⭐ 4.5  •  Plumber"),
-              SizedBox(height: 8),
-              Text("Today • 3:00 PM – 5:00 PM"),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.chat),
-            label: const Text("Chat"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryBlue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -317,6 +289,134 @@ class _PendingJobCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ActiveJobCard extends StatelessWidget {
+  final String title;
+  final String location;
+  final String technicianId;
+
+  const _ActiveJobCard({
+    super.key,
+    required this.title,
+    required this.location,
+    required this.technicianId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(technicianId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final tech = snapshot.data!.data() as Map<String, dynamic>;
+        final username = tech['username'] ?? "Unknown Technician";
+        final specialization = tech['specialization'] ?? "Technician";
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _box(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(location),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                "Assigned Technician",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                username,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(specialization),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    // TODO : Call Technician
+                  },
+                  icon: const Icon(
+                    Icons.call,
+                    color: Colors.white,
+                  ),
+                  label: const Text(
+                    "Call",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    // TODO : Cancel Booking
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: Colors.red,
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel Booking",
+                    style: TextStyle(
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

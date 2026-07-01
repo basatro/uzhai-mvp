@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/technician_bottom_nav.dart';
 
 class TechMyJobsScreen extends StatefulWidget {
@@ -80,15 +82,39 @@ class _PendingJobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _PendingJobTile(
-          customer: "Ramesh Kumar",
-          area: "Anna Nagar",
-          quote: "₹450",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('quotes')
+          .where('technicianId', isEqualTo: uid)
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Pending Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final quote = snapshot.data!.docs[index];
+            return _PendingQuoteCard(
+              jobId: quote['jobId'],
+              amount: quote['amount'].toString(),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -100,14 +126,38 @@ class _ActiveJobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _ActiveJobTile(
-          customer: "Ramesh Kumar",
-          area: "Anna Nagar",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('quotes')
+          .where('technicianId', isEqualTo: uid)
+          .where('status', isEqualTo: 'assigned')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Active Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final quote = snapshot.data!.docs[index];
+            return _ActiveQuoteCard(
+              jobId: quote['jobId'],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -229,6 +279,48 @@ class _PendingJobTile extends StatelessWidget {
   }
 }
 
+//////////////// PENDING QUOTE CARD (fetches job by jobId) //////////////////
+
+class _PendingQuoteCard extends StatelessWidget {
+  final String jobId;
+  final String amount;
+
+  const _PendingQuoteCard({
+    super.key,
+    required this.jobId,
+    required this.amount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final job = snapshot.data!.data() as Map<String, dynamic>;
+
+        return _PendingJobTile(
+          customer: job['customerName'],
+          area: job['location'],
+          quote: "₹$amount",
+        );
+      },
+    );
+  }
+}
+
 //////////////// ACTIVE JOB TILE (STEP 2 — UPGRADED) //////////////////
 
 class _ActiveJobTile extends StatelessWidget {
@@ -343,6 +435,45 @@ class _ActiveJobTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+//////////////// ACTIVE QUOTE CARD (fetches job by jobId) //////////////////
+
+class _ActiveQuoteCard extends StatelessWidget {
+  final String jobId;
+
+  const _ActiveQuoteCard({
+    super.key,
+    required this.jobId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final job = snapshot.data!.data() as Map<String, dynamic>;
+
+        return _ActiveJobTile(
+          customer: job['customerName'],
+          area: job['location'],
+        );
+      },
     );
   }
 }
