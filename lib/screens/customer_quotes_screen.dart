@@ -219,16 +219,18 @@ Future<void> assignTechnician({
     'selectedTechnicianId': technicianId,
   });
 
-  // 3. Reject remaining quotes
+  // 3. Cancel remaining quotes
   final otherQuotes = await firestore
       .collection('quotes')
       .where('jobId', isEqualTo: jobId)
       .get();
 
-  for (var doc in otherQuotes.docs) {
+  for (final doc in otherQuotes.docs) {
     if (doc.id != quoteId) {
       await doc.reference.update({
-        'status': 'rejected',
+        'status': 'cancelled',
+        'cancelledBy': 'Customer',
+        'cancelReason': 'Another technician was selected',
       });
     }
   }

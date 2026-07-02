@@ -445,12 +445,15 @@ class _ActiveJobCard extends StatelessWidget {
 
                     if (confirm != true) return;
 
-                    // ✅ STEP 4 — Customer cancellation now fully
-                    // deletes the job and its quotes instead of
-                    // marking them as "cancelled".
+                    // ✅ STEP 1 — Customer cancellation now deletes
+                    // the job and its quotes atomically using a
+                    // WriteBatch, so either everything is deleted
+                    // or nothing is (no partial deletions).
                     final jobRef = FirebaseFirestore.instance
                         .collection('jobs')
                         .doc(jobId);
+
+                    final batch = FirebaseFirestore.instance.batch();
 
                     final quotes = await FirebaseFirestore.instance
                         .collection('quotes')
@@ -458,10 +461,12 @@ class _ActiveJobCard extends StatelessWidget {
                         .get();
 
                     for (final doc in quotes.docs) {
-                      await doc.reference.delete();
+                      batch.delete(doc.reference);
                     }
 
-                    await jobRef.delete();
+                    batch.delete(jobRef);
+
+                    await batch.commit();
 
                     if (!context.mounted) return;
 

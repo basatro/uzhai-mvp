@@ -542,16 +542,18 @@ class _ActiveJobTile extends StatelessWidget {
                   'selectedQuoteId': '',
                 });
 
-                // STEP 5 — reopen all quotes for this job
+                // STEP 5 (UPDATED) — delete all quotes tied to this job so
+                // every technician (including the one cancelling) starts
+                // fresh and can submit a new quote if the job reopens.
+                final currentUid = FirebaseAuth.instance.currentUser!.uid;
+
                 final quotes = await FirebaseFirestore.instance
                     .collection('quotes')
                     .where('jobId', isEqualTo: jobId)
                     .get();
 
                 for (final doc in quotes.docs) {
-                  await doc.reference.update({
-                    'status': 'pending',
-                  });
+                  await doc.reference.delete();
                 }
 
                 // STEP 6 — skip technician who cancelled
@@ -673,13 +675,14 @@ class _CancelledQuoteCard extends StatelessWidget {
         final job =
             snapshot.data!.data() as Map<String, dynamic>;
 
+        // STEP 5 — null-safe fallbacks to avoid crashes
         return _JobTile(
           customer: job['customerName'] ?? "Unknown",
           area: job['location'] ?? "",
           time: "",
           status: "Cancelled",
-          cancelledBy: job['cancelledBy'],
-          cancelReason: job['cancelReason'],
+          cancelledBy: job['cancelledBy'] ?? "",
+          cancelReason: job['cancelReason'] ?? "",
         );
       },
     );

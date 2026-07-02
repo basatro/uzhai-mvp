@@ -64,26 +64,53 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
               child: CircularProgressIndicator(),
             )
           : StreamBuilder<QuerySnapshot>(
+              // 🔧 FIX 1 — orderBy('createdAt', descending: true) temporarily
+              // removed to confirm whether a missing composite index was the
+              // cause of no jobs showing up. Add it back once you've created
+              // the index in the Firebase console (Firestore will give you a
+              // direct link to create it in the debug console/logs).
               stream: FirebaseFirestore.instance
                   .collection('jobs')
                   .where('category', isEqualTo: specialization)
                   .where('status', isEqualTo: 'open')
+                  // .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
 
                 print("Specialization: $specialization");
                 print("Docs found: ${snapshot.data?.docs.length}");
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                // 🔧 FIX 2 — surface any Firestore error instead of spinning
+                // forever silently (e.g. missing index, permission denied).
+                if (snapshot.hasError) {
+                  print(snapshot.error);
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        snapshot.error.toString(),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
+                // 🔧 FIX 3 — only show the loading spinner while waiting AND
+                // there's no data yet, so we don't get stuck spinning on
+                // subsequent snapshot updates that still say "waiting".
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(),
                   );
                 }
 
-                // ✅ STEP 7 — Updated empty check with skippedBy filter
+                // 🔧 FIX 4 — if there's genuinely no data (stream closed /
+                // errored out silently), show "No Jobs" instead of spinning
+                // forever.
                 if (!snapshot.hasData) {
                   return const Center(
-                    child: CircularProgressIndicator(),
+                    child: Text("No Jobs"),
                   );
                 }
 
@@ -96,6 +123,11 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                       List<String>.from(data['skippedBy'] ?? []);
                   return !skipped.contains(uid);
                 }).toList();
+
+                // 🔧 FIX 5 — debug counts to distinguish "Firestore returned
+                // 0 docs" from "skippedBy filter removed them all".
+                print("Firestore Docs : ${snapshot.data!.docs.length}");
+                print("Visible Jobs : ${jobs.length}");
 
                 if (jobs.isEmpty) {
                   return Center(
@@ -115,6 +147,13 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                     final job = jobs[index];
 
                     print(job.data());
+
+                    // ✅ STEP 3 (NEW) — Safety check: don't show a job this
+                    // technician is already assigned to
+                    final data = job.data() as Map<String, dynamic>;
+                    if (data['selectedTechnicianId'] == uid) {
+                      return const SizedBox();
+                    }
 
                     // ✅ STEP 2 — jobId passed to JobCard
                     return JobCard(

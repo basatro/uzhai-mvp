@@ -60,7 +60,33 @@ class _TechQuoteScreenState extends State<TechQuoteScreen> {
     });
 
     try {
+      // STEP 1 (NEW) — Block technicians who already cancelled this job
+      final jobDoc = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(widget.jobId)
+          .get();
+      final jobData = jobDoc.data() as Map<String, dynamic>;
+      final skippedBy =
+          List<String>.from(jobData['skippedBy'] ?? []);
+      final currentUid =
+          FirebaseAuth.instance.currentUser!.uid;
+      if (skippedBy.contains(currentUid)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "You have already cancelled this job.",
+            ),
+          ),
+        );
+        setState(() {
+          isLoading = false;
+        });
+        return;
+      }
+
       final technician = FirebaseAuth.instance.currentUser!;
+
       final technicianDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(technician.uid)
