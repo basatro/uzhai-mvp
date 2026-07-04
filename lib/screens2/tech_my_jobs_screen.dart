@@ -52,7 +52,7 @@ class _TechMyJobsScreenState extends State<TechMyJobsScreen>
           tabs: const [
             Tab(text: "Pending"),
             Tab(text: "Active"),
-            Tab(text: "History"),   // STEP 1 — renamed from "Completed"
+            Tab(text: "History"),
             Tab(text: "Cancelled"),
           ],
         ),
@@ -170,19 +170,40 @@ class _CompletedJobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        // STEP 3 — added amount + rating
-        _JobTile(
-          customer: "Meena",
-          area: "Vadapalani",
-          time: "28 June 2026",
-          status: "Completed",
-          amount: "₹450",
-          rating: "4.8",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('selectedTechnicianId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData ||
+            snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Completed Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job = snapshot.data!.docs[index];
+            return _CompletedJobCard(
+              jobId: job.id,
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -341,7 +362,7 @@ class _PendingQuoteCard extends StatelessWidget {
   }
 }
 
-//////////////// CANCEL DIALOG (STEP 2) //////////////////
+//////////////// CANCEL DIALOG //////////////////
 
 Future<bool?> showTechnicianCancelDialog(
   BuildContext context,
@@ -408,7 +429,7 @@ Future<bool?> showTechnicianCancelDialog(
   );
 }
 
-//////////////// ACTIVE JOB TILE (STEP 2 — UPGRADED + STEPS 6/7) //////////////////
+//////////////// ACTIVE JOB TILE //////////////////
 
 class _ActiveJobTile extends StatelessWidget {
   final String customer;
@@ -503,7 +524,7 @@ class _ActiveJobTile extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // ❌ CANCEL BUTTON — STEP 2: label shortened to "Cancel"
+          // ❌ CANCEL BUTTON
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -518,7 +539,7 @@ class _ActiveJobTile extends StatelessWidget {
 
                 if (confirm != true) return;
 
-                // STEP 3 — get technician name
+                // get technician name
                 final techDoc = await FirebaseFirestore.instance
                     .collection('users')
                     .doc(FirebaseAuth.instance.currentUser!.uid)
@@ -526,47 +547,28 @@ class _ActiveJobTile extends StatelessWidget {
 
                 final technicianName = techDoc['username'];
 
-                // STEP 4 — reopen job, store cancel metadata
+                // mark job as cancelled, store cancel metadata,
+                // keep selectedTechnicianId / selectedQuoteId as-is
                 await FirebaseFirestore.instance
                     .collection('jobs')
                     .doc(jobId)
                     .update({
-                  // reopen job
-                  'status': 'open',
-                  // remember who cancelled
+                  'status': 'cancelled',
                   'cancelledBy': 'Technician',
                   'cancelledTechnicianName': technicianName,
                   'cancelReason': controller.text.trim(),
-                  // remove assigned technician
-                  'selectedTechnicianId': '',
-                  'selectedQuoteId': '',
                 });
 
-                // STEP 5 (UPDATED) — delete all quotes tied to this job so
-                // every technician (including the one cancelling) starts
-                // fresh and can submit a new quote if the job reopens.
-                final currentUid = FirebaseAuth.instance.currentUser!.uid;
-
-                final quotes = await FirebaseFirestore.instance
-                    .collection('quotes')
-                    .where('jobId', isEqualTo: jobId)
-                    .get();
-
-                for (final doc in quotes.docs) {
-                  await doc.reference.delete();
-                }
-
-                // STEP 6 — skip technician who cancelled
+                // mark the quote as cancelled instead of deleting it
                 await FirebaseFirestore.instance
-                    .collection('jobs')
-                    .doc(jobId)
+                    .collection('quotes')
+                    .doc(quoteId)
                     .update({
-                  'skippedBy': FieldValue.arrayUnion([
-                    FirebaseAuth.instance.currentUser!.uid
-                  ])
+                  'status': 'cancelled',
+                  'cancelledAt': Timestamp.now(),
                 });
 
-                // STEP 7 — snackbar
+                // snackbar
                 if (!context.mounted) return;
 
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -631,13 +633,63 @@ class _ActiveQuoteCard extends StatelessWidget {
 
         final job = snapshot.data!.data() as Map<String, dynamic>;
 
-
-
         return _ActiveJobTile(
           customer: job['customerName'],
           area: job['location'],
           quoteId: quoteId,
           jobId: jobId,
+        );
+      },
+    );
+  }
+}
+
+//////////////// COMPLETED JOB CARD (fetches job by jobId) //////////////////
+
+class _CompletedJobCard extends StatelessWidget {
+  final String jobId;
+
+  const _CompletedJobCard({
+    super.key,
+    required this.jobId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData ||
+            !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final job =
+            snapshot.data!.data() as Map<String, dynamic>;
+
+        return _JobTile(
+          customer: job['customerName'] ?? "",
+          area: job['location'] ?? "",
+          time: job['completedAt'] != null
+              ? (job['completedAt'] as Timestamp)
+                  .toDate()
+                  .toString()
+                  .substring(0, 10)
+              : "",
+          status: "Completed",
+          // Temporary values for MVP
+          amount: "₹${job['selectedAmount'] ?? ""}",
+          rating: "4.8",
         );
       },
     );
@@ -675,7 +727,6 @@ class _CancelledQuoteCard extends StatelessWidget {
         final job =
             snapshot.data!.data() as Map<String, dynamic>;
 
-        // STEP 5 — null-safe fallbacks to avoid crashes
         return _JobTile(
           customer: job['customerName'] ?? "Unknown",
           area: job['location'] ?? "",
@@ -689,20 +740,18 @@ class _CancelledQuoteCard extends StatelessWidget {
   }
 }
 
-//////////////// GENERIC JOB TILE (STEPS 5 + 6 + 7) //////////////////
+//////////////// GENERIC JOB TILE //////////////////
 
 class _JobTile extends StatelessWidget {
   final String customer;
   final String area;
   final String time;
   final String status;
-  // STEP 5 — optional fields
   final String? amount;
   final String? rating;
   final String? cancelledBy;
   final String? cancelReason;
 
-  // STEP 5 — updated constructor
   const _JobTile({
     required this.customer,
     required this.area,
@@ -755,7 +804,6 @@ class _JobTile extends StatelessWidget {
             ),
           ),
 
-          // STEP 6 — History details
           if (status == "Completed") ...[
             const SizedBox(height: 12),
             Text(
@@ -773,7 +821,6 @@ class _JobTile extends StatelessWidget {
             ),
           ],
 
-          // STEP 7 — Cancelled details
           if (status == "Cancelled") ...[
             const SizedBox(height: 12),
             const Text(

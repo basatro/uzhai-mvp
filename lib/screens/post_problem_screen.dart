@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../services/cloudinary_service.dart';
 
 class PostProblemScreen extends StatefulWidget {
   final String? preSelectedService;
@@ -37,6 +40,12 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
   final descriptionController = TextEditingController();
   String location = "";
 
+  final ImagePicker _picker = ImagePicker();
+  List<File> selectedImages = [];
+  List<String> uploadedImageUrls = [];
+
+  bool isUploading = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +67,23 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
         location = doc['location'] ?? "";
       });
     }
+  }
+
+  Future<void> pickImages() async {
+    if (selectedImages.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Maximum 3 images allowed"),
+        ),
+      );
+      return;
+    }
+    final XFile? image =
+        await _picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    setState(() {
+      selectedImages.add(File(image.path));
+    });
   }
 
 Future<void> postJob() async {
@@ -95,7 +121,7 @@ Future<void> postJob() async {
   // Description / Image / Audio validation
   // For now only description exists
   // Later replace imageAdded and audioAdded
-  bool imageAdded = false;
+  bool imageAdded = selectedImages.isNotEmpty;
   bool audioAdded = false;
 
   if (descriptionController.text.trim().isEmpty &&
@@ -112,9 +138,27 @@ Future<void> postJob() async {
     return;
   }
 
+  setState(() {
+    isUploading = true;
+  });
+
   final user = FirebaseAuth.instance.currentUser;
 
-  if (user == null) return;
+  if (user == null) {
+    setState(() {
+      isUploading = false;
+    });
+    return;
+  }
+
+  // Upload selected images to Cloudinary
+  List<String> imageUrls = [];
+  for (final image in selectedImages) {
+    final url = await CloudinaryService.uploadImage(image);
+    if (url != null) {
+      imageUrls.add(url);
+    }
+  }
 
   final userDoc = await FirebaseFirestore.instance
       .collection('users')
@@ -135,6 +179,8 @@ Future<void> postJob() async {
 
     'description': descriptionController.text.trim(),
 
+    'images': imageUrls,
+
     'location': location,
 
     'status': 'open',
@@ -149,6 +195,13 @@ Future<void> postJob() async {
       content: Text("Job Posted Successfully"),
     ),
   );
+
+  selectedImages.clear();
+  uploadedImageUrls.clear();
+
+  setState(() {
+    isUploading = false;
+  });
 
   Navigator.pop(context);
 }
@@ -230,30 +283,43 @@ Future<void> postJob() async {
 
             const SizedBox(height: 24),
 
-            // IMAGES — Change 2: removed "(optional)"
+            // IMAGES
             const Text("Attach Images", style: _labelStyle),
             const SizedBox(height: 12),
 
             Row(
               children: List.generate(
-                5,
-                (i) => Container(
-                  margin: const EdgeInsets.only(right: 10),
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.grey,
+                3,
+                (i) => GestureDetector(
+                  onTap: pickImages,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                    child: i < selectedImages.length
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              selectedImages[i],
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.add_a_photo,
+                            color: Colors.grey,
+                          ),
                   ),
                 ),
               ),
             ),
 
-            // VOICE NOTE — Change 2: removed "(Optional)"
+            // VOICE NOTE
             const SizedBox(height: 24),
 
             const Text("Voice Note", style: _labelStyle),
@@ -278,7 +344,7 @@ Future<void> postJob() async {
 
             const SizedBox(height: 24),
 
-            // SERVICE LOCATION — Change 1: with Change Location button
+            // SERVICE LOCATION
             const Text("Service Location", style: _labelStyle),
             const SizedBox(height: 8),
 
@@ -343,25 +409,33 @@ Future<void> postJob() async {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: postJob,
+                onPressed: isUploading ? null : postJob,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryBlue,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(26),
                   ),
                 ),
-                child: const Text(
-                  "Post Job",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                child: isUploading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text(
+                        "Post Job",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
 
-            // Change 3: extra bottom padding so button clears nav bar
             const SizedBox(height: 80),
           ],
         ),

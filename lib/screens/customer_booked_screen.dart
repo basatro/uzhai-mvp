@@ -61,11 +61,17 @@ class _CustomerBookedScreenState extends State<CustomerBookedScreen>
 
       body: TabBarView(
         controller: _tabController,
-        children: const [
-          _PendingTab(),
-          _ActiveTab(),
-          _HistoryTab(),
-          _CancelledTab(),
+        children: [
+          const _PendingTab(),
+          _ActiveTab(
+            onCompleted: () {
+              setState(() {
+                _tabController.index = 2;
+              });
+            },
+          ),
+          const _HistoryTab(),
+          const _CancelledTab(),
         ],
       ),
 
@@ -125,7 +131,11 @@ class _PendingTab extends StatelessWidget {
 //////////////////// ACTIVE ////////////////////
 
 class _ActiveTab extends StatelessWidget {
-  const _ActiveTab();
+  final VoidCallback onCompleted;
+  const _ActiveTab({
+    super.key,
+    required this.onCompleted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +168,7 @@ class _ActiveTab extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: _ActiveJobCard(
+                onCompleted: onCompleted,
                 jobId: job.id,
                 title: job['title'],
                 location: job['location'],
@@ -178,16 +189,64 @@ class _HistoryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _HistoryCard(
-          name: "Ramesh Kumar",
-          date: "28 June 2025",
-          amount: "₹450",
-          status: "Completed",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      // ✅ STEP 1 — orderBy() removed (it requires a composite index
+      // and was silently causing the stream to error out/hang).
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        // ✅ STEP 2 — Show Firestore errors instead of a blank screen.
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              snapshot.error.toString(),
+              textAlign: TextAlign.center,
+            ),
+          );
+        }
+
+        // ✅ STEP 3 — Handle empty history.
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Completed Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            // ✅ STEP 8 — Print every history job for debugging.
+            print(job);
+
+            return _HistoryCard(
+              name: job['title'] ?? "",
+              amount: job['amount'] != null ? "₹${job['amount']}" : "",
+              status: "Completed",
+              date: job['completedAt'] != null
+                  ? (job['completedAt'] as Timestamp)
+                      .toDate()
+                      .toString()
+                      .substring(0, 10)
+                  : "",
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -300,7 +359,6 @@ class _PendingJobCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton(
-              // ✅ STEP 2 — Navigator.push() to CustomerQuotesScreen
               onPressed: () {
                 Navigator.push(
                   context,
@@ -333,6 +391,7 @@ class _ActiveJobCard extends StatelessWidget {
   final String title;
   final String location;
   final String technicianId;
+  final VoidCallback onCompleted;
 
   const _ActiveJobCard({
     super.key,
@@ -340,6 +399,7 @@ class _ActiveJobCard extends StatelessWidget {
     required this.title,
     required this.location,
     required this.technicianId,
+    required this.onCompleted,
   });
 
   @override
@@ -433,6 +493,96 @@ class _ActiveJobCard extends StatelessWidget {
 
               SizedBox(
                 width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final confirm = await showCompleteJobDialog(context);
+                    if (confirm != true) return;
+
+                    final jobRef = FirebaseFirestore.instance
+                        .collection('jobs')
+                        .doc(jobId);
+
+                    final jobSnapshot = await jobRef.get();
+                    final selectedQuoteId = jobSnapshot['selectedQuoteId'];
+
+                    // Fetch the quote (if any) so we can store its
+                    // amount on the job when marking it completed.
+                    final quote = selectedQuoteId != null
+                        ? await FirebaseFirestore.instance
+                            .collection('quotes')
+                            .doc(selectedQuoteId)
+                            .get()
+                        : null;
+
+                    await jobRef.update({
+                      'status': 'completed',
+                      'completedAt': Timestamp.now(),
+                      if (quote != null && quote.exists)
+                        'amount': quote['amount'],
+                    });
+
+                    // ✅ STEP 4 — Verify the Firestore update actually
+                    // applied by re-fetching and printing the job.
+                    final updatedJob = await jobRef.get();
+                    print(updatedJob.data());
+
+                    // ✅ STEP 5 — Update the quote safely, only if a
+                    // selectedQuoteId actually exists.
+                    if (selectedQuoteId != null) {
+                      await FirebaseFirestore.instance
+                          .collection('quotes')
+                          .doc(selectedQuoteId)
+                          .update({
+                        'status': 'completed',
+                        'completedAt': Timestamp.now(),
+                      });
+                    }
+
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          "Job Completed Successfully",
+                        ),
+                      ),
+                    );
+
+                    await Future.delayed(
+                      const Duration(milliseconds: 300),
+                    );
+
+                    onCompleted();
+                  },
+                  icon: const Icon(
+                    Icons.check_circle_outline,
+                    color: primaryBlue,
+                  ),
+                  label: const Text(
+                    "Complete Job",
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: primaryBlue,
+                      width: 1.5,
+                    ),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () async {
 
@@ -445,10 +595,6 @@ class _ActiveJobCard extends StatelessWidget {
 
                     if (confirm != true) return;
 
-                    // ✅ STEP 1 — Customer cancellation now deletes
-                    // the job and its quotes atomically using a
-                    // WriteBatch, so either everything is deleted
-                    // or nothing is (no partial deletions).
                     final jobRef = FirebaseFirestore.instance
                         .collection('jobs')
                         .doc(jobId);
@@ -498,7 +644,7 @@ class _ActiveJobCard extends StatelessWidget {
   }
 }
 
-//////////////////// CUSTOMER CANCEL DIALOG (STEP 4) ////////////////////
+//////////////////// CUSTOMER CANCEL DIALOG ////////////////////
 
 Future<bool?> showCustomerCancelDialog(
   BuildContext context,
@@ -546,6 +692,37 @@ Future<bool?> showCustomerCancelDialog(
           ),
         ),
 
+      ],
+    ),
+  );
+}
+
+//////////////////// COMPLETE JOB DIALOG ////////////////////
+
+Future<bool?> showCompleteJobDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Complete Job"),
+      content: const Text(
+        "Are you sure the technician has completed the work?",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("No"),
+        ),
+        // ✅ STEP 6 — Complete button color changed to primaryBlue.
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryBlue,
+          ),
+          child: const Text(
+            "Complete",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
       ],
     ),
   );
@@ -599,7 +776,8 @@ class _HistoryCard extends StatelessWidget {
             status,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: status == "Completed" ? Colors.green : Colors.red,
+              // ✅ STEP 7 — Completed status now shown in primaryBlue.
+              color: status == "Completed" ? primaryBlue : Colors.red,
             ),
           ),
           if (status == "Cancelled" && cancelledBy != null) ...[
@@ -612,8 +790,6 @@ class _HistoryCard extends StatelessWidget {
 
             Text(cancelledBy!),
 
-            // ✅ STEP 2 — Show technician name only when the
-            // technician was the one who cancelled the job.
             if (cancelledBy == "Technician" &&
                 cancelledTechnicianName != null &&
                 cancelledTechnicianName!.isNotEmpty) ...[

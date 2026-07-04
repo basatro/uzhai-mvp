@@ -111,6 +111,10 @@ class CustomerQuotesScreen extends StatelessWidget {
                     reliability: "9.6",
                     distance: "1.4 km",
                     amount: "₹${data['amount']}",
+                    // ✅ STEP 3 — raw numeric amount (no ₹ symbol),
+                    // passed through so it can be stored on the job
+                    // as 'selectedAmount' when this quote is assigned.
+                    rawAmount: data['amount'],
                   ),
                 );
               }).toList(),
@@ -204,6 +208,8 @@ Future<void> assignTechnician({
   required String jobId,
   required String quoteId,
   required String technicianId,
+  // ✅ STEP 3 — new parameter carrying the raw quote amount.
+  required dynamic amount,
 }) async {
   final firestore = FirebaseFirestore.instance;
 
@@ -217,6 +223,9 @@ Future<void> assignTechnician({
     'status': 'assigned',
     'selectedQuoteId': quoteId,
     'selectedTechnicianId': technicianId,
+    // ✅ STEP 3 — store the accepted quote's amount on the job so
+    // the technician's Completed/History tab can display it later.
+    'selectedAmount': amount,
   });
 
   // 3. Cancel remaining quotes
@@ -255,6 +264,8 @@ class QuoteCard extends StatelessWidget {
   final String reliability;
   final String distance;
   final String amount;
+  // ✅ STEP 3 — raw numeric amount used for Firestore writes.
+  final dynamic rawAmount;
 
   const QuoteCard({
     super.key,
@@ -267,6 +278,7 @@ class QuoteCard extends StatelessWidget {
     required this.amount,
     required this.distance,
     required this.reliability,
+    required this.rawAmount,
   });
 
   static const Color primaryBlue = Color(0xFF1E88E5);
@@ -343,6 +355,8 @@ class QuoteCard extends StatelessWidget {
                   jobId: jobId,
                   quoteId: quoteId,
                   technicianId: technicianId,
+                  // ✅ STEP 3 — pass the raw amount through.
+                  amount: rawAmount,
                 );
               },
 
