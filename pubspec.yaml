@@ -25,8 +25,22 @@ dependencies:
   # Cloudinary
   cloudinary_public: ^0.23.1
 
-  # HTTP (Cloudinary Upload)
+  # HTTP
   http: ^1.2.2
+
+  # Image Carousel
+  carousel_slider: ^5.0.0
+
+  # Full Screen Zoom
+  photo_view: ^0.15.0
+
+  # Audio Recording
+  record: ^6.1.1
+
+  # Audio Playback
+  audioplayers: ^6.5.0
+
+  just_audio: ^0.10.4
 
 dev_dependencies:
   flutter_test:

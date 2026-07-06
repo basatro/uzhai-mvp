@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:just_audio/just_audio.dart';
 import '../widgets/technician_bottom_nav.dart';
 import 'tech_quote_screen.dart';
 
@@ -64,11 +67,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
               child: CircularProgressIndicator(),
             )
           : StreamBuilder<QuerySnapshot>(
-              // 🔧 FIX 1 — orderBy('createdAt', descending: true) temporarily
-              // removed to confirm whether a missing composite index was the
-              // cause of no jobs showing up. Add it back once you've created
-              // the index in the Firebase console (Firestore will give you a
-              // direct link to create it in the debug console/logs).
               stream: FirebaseFirestore.instance
                   .collection('jobs')
                   .where('category', isEqualTo: specialization)
@@ -80,8 +78,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                 print("Specialization: $specialization");
                 print("Docs found: ${snapshot.data?.docs.length}");
 
-                // 🔧 FIX 2 — surface any Firestore error instead of spinning
-                // forever silently (e.g. missing index, permission denied).
                 if (snapshot.hasError) {
                   print(snapshot.error);
                   return Center(
@@ -95,9 +91,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                   );
                 }
 
-                // 🔧 FIX 3 — only show the loading spinner while waiting AND
-                // there's no data yet, so we don't get stuck spinning on
-                // subsequent snapshot updates that still say "waiting".
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData) {
                   return const Center(
@@ -105,9 +98,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                   );
                 }
 
-                // 🔧 FIX 4 — if there's genuinely no data (stream closed /
-                // errored out silently), show "No Jobs" instead of spinning
-                // forever.
                 if (!snapshot.hasData) {
                   return const Center(
                     child: Text("No Jobs"),
@@ -116,7 +106,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 
                 final uid = FirebaseAuth.instance.currentUser!.uid;
 
-                // ✅ STEP 6 — Filter out skipped jobs
                 final jobs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final skipped =
@@ -124,8 +113,6 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
                   return !skipped.contains(uid);
                 }).toList();
 
-                // 🔧 FIX 5 — debug counts to distinguish "Firestore returned
-                // 0 docs" from "skippedBy filter removed them all".
                 print("Firestore Docs : ${snapshot.data!.docs.length}");
                 print("Visible Jobs : ${jobs.length}");
 
@@ -140,32 +127,34 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  // ✅ STEP 6 — Use filtered jobs list
                   itemCount: jobs.length,
                   itemBuilder: (context, index) {
-                    // ✅ STEP 6 — Use filtered jobs list
                     final job = jobs[index];
 
                     print(job.data());
 
-                    // ✅ STEP 3 (NEW) — Safety check: don't show a job this
-                    // technician is already assigned to
-                    final data = job.data() as Map<String, dynamic>;
-                    if (data['selectedTechnicianId'] == uid) {
+                    // ✅ STEP 2 — Safe extraction of the job's Map + images
+                    final Map<String, dynamic> jobData =
+                        job.data() as Map<String, dynamic>;
+                    final List<dynamic> images = jobData['images'] ?? [];
+                    final String audio = jobData['audio'] ?? "";
+
+                    if (jobData['selectedTechnicianId'] == uid) {
                       return const SizedBox();
                     }
 
-                    // ✅ STEP 2 — jobId passed to JobCard
                     return JobCard(
                       jobId: job.id,
-                      customerId: job['customerId'],
-                      customerName: job['customerName'],
-                      area: job['location'],
+                      customerId: jobData['customerId'],
+                      customerName: jobData['customerName'],
+                      area: jobData['location'],
                       distance: "",
                       time: "",
-                      problem: job['description'],
-                      images: const [],
-                      category: job['category'],
+                      problem: jobData['description'],
+                      // ✅ STEP 3 — use the safe `images` list, cast to String
+                      images: images.map((e) => e.toString()).toList(),
+                      audio: audio,
+                      category: jobData['category'],
                     );
                   },
                 );
@@ -180,8 +169,7 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
 
 //////////////////// JOB CARD ////////////////////
 
-class JobCard extends StatelessWidget {
-  // ✅ STEP 2 & 3 — jobId and customerId fields
+class JobCard extends StatefulWidget {
   final String jobId;
   final String customerId;
   final String customerName;
@@ -190,11 +178,11 @@ class JobCard extends StatelessWidget {
   final String time;
   final String problem;
   final List<String> images;
+  final String audio;
   final String category;
 
   const JobCard({
     super.key,
-    // ✅ STEP 3 — jobId added to constructor
     required this.jobId,
     required this.customerId,
     required this.customerName,
@@ -203,17 +191,31 @@ class JobCard extends StatelessWidget {
     required this.time,
     required this.problem,
     required this.images,
+    required this.audio,
     required this.category,
   });
 
+  @override
+  State<JobCard> createState() => _JobCardState();
+}
+
+class _JobCardState extends State<JobCard> {
+  final AudioPlayer player = AudioPlayer();
+  bool playing = false;
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+
   static const Color neonOrange = Color(0xFFFF6B00);
 
-  // ✅ STEP 4 — Skip function writes to Firestore
   Future<void> skipJob() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     await FirebaseFirestore.instance
         .collection('jobs')
-        .doc(jobId)
+        .doc(widget.jobId)
         .update({
       'skippedBy': FieldValue.arrayUnion([uid]),
     });
@@ -239,7 +241,6 @@ class JobCard extends StatelessWidget {
               child: const Text("Cancel"),
             ),
             ElevatedButton(
-              // ✅ STEP 5 — Skip dialog calls skipJob() and closes
               onPressed: () async {
                 await skipJob();
                 Navigator.pop(context);
@@ -272,53 +273,43 @@ class JobCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-          // Images only render if non-empty
-          if (images.isNotEmpty)
-            SizedBox(
+          // ✅ STEP 4 — Carousel only if images exist
+          if (widget.images.isNotEmpty) _ImageCarousel(images: widget.images),
+
+          // ✅ STEP 5 — Placeholder when there are no images
+          if (widget.images.isEmpty)
+            Container(
               height: 220,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: images.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  return AspectRatio(
-                    aspectRatio: 1,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Image.network(
-                        images[index],
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 40,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.image_not_supported,
+                  size: 50,
+                  color: Colors.grey,
+                ),
               ),
             ),
 
-          if (images.isNotEmpty) const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           /// 👤 CUSTOMER + 📏 DISTANCE
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                customerName,
+                widget.customerName,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              if (distance.isNotEmpty)
+              if (widget.distance.isNotEmpty)
                 Text(
-                  distance,
+                  widget.distance,
                   style: const TextStyle(color: Colors.grey),
                 ),
             ],
@@ -327,7 +318,7 @@ class JobCard extends StatelessWidget {
           const SizedBox(height: 4),
 
           /// 📍 AREA
-          Text(area, style: const TextStyle(color: Colors.grey)),
+          Text(widget.area, style: const TextStyle(color: Colors.grey)),
 
           const SizedBox(height: 10),
 
@@ -339,7 +330,7 @@ class JobCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
-              category,
+              widget.category,
               style: const TextStyle(
                 color: neonOrange,
                 fontWeight: FontWeight.bold,
@@ -350,17 +341,68 @@ class JobCard extends StatelessWidget {
           const SizedBox(height: 8),
 
           /// 🕒 TIME — only show if non-empty
-          if (time.isNotEmpty)
-            Text(time, style: const TextStyle(color: Colors.grey)),
+          if (widget.time.isNotEmpty)
+            Text(widget.time, style: const TextStyle(color: Colors.grey)),
 
-          if (time.isNotEmpty) const SizedBox(height: 8),
+          if (widget.time.isNotEmpty) const SizedBox(height: 8),
 
           /// 📝 PROBLEM
           Text(
-            problem,
+            widget.problem,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+
+          const SizedBox(height: 16),
+
+          /// 🔊 VOICE NOTE
+          if (widget.audio.isNotEmpty)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: Icon(
+                  playing
+                      ? Icons.pause
+                      : Icons.play_arrow,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  playing
+                      ? "Pause Voice Note"
+                      : "Play Voice Note",
+                  style: const TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey,
+                ),
+                onPressed: () async {
+                  if (playing) {
+                    await player.pause();
+                    setState(() {
+                      playing = false;
+                    });
+                  } else {
+                    await player.setUrl(widget.audio);
+                    await player.play();
+                    setState(() {
+                      playing = true;
+                    });
+                    player.playerStateStream.listen((state) {
+                      if (state.processingState ==
+                          ProcessingState.completed) {
+                        if (mounted) {
+                          setState(() {
+                            playing = false;
+                          });
+                        }
+                      }
+                    });
+                  }
+                },
+              ),
+            ),
 
           const SizedBox(height: 18),
 
@@ -389,14 +431,14 @@ class JobCard extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => TechQuoteScreen(
-                          jobId: jobId,
-                          customerId: customerId,
-                          customerName: customerName,
-                          area: area,
-                          distance: distance,
-                          time: time,
-                          problem: problem,
-                          images: images,
+                          jobId: widget.jobId,
+                          customerId: widget.customerId,
+                          customerName: widget.customerName,
+                          area: widget.area,
+                          distance: widget.distance,
+                          time: widget.time,
+                          problem: widget.problem,
+                          images: widget.images,
                         ),
                       ),
                     );
@@ -416,6 +458,113 @@ class JobCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+//////////////////// IMAGE CAROUSEL ////////////////////
+
+class _ImageCarousel extends StatefulWidget {
+  final List<String> images;
+  const _ImageCarousel({
+    required this.images,
+  });
+  @override
+  State<_ImageCarousel> createState() => _ImageCarouselState();
+}
+
+class _ImageCarouselState extends State<_ImageCarousel> {
+  int current = 0;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        CarouselSlider.builder(
+          itemCount: widget.images.length,
+          itemBuilder: (_, index, __) {
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FullScreenImage(
+                      imageUrl: widget.images[index],
+                    ),
+                  ),
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  widget.images[index],
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(
+                      Icons.image_not_supported,
+                      size: 40,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          options: CarouselOptions(
+            height: 220,
+            viewportFraction: 1,
+            enlargeCenterPage: false,
+            enableInfiniteScroll: false,
+            onPageChanged: (index, reason) {
+              setState(() {
+                current = index;
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            widget.images.length,
+            (index) => AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: current == index ? 12 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: current == index
+                    ? Colors.orange
+                    : Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+//////////////////// FULL SCREEN IMAGE ////////////////////
+
+class FullScreenImage extends StatelessWidget {
+  final String imageUrl;
+  const FullScreenImage({
+    super.key,
+    required this.imageUrl,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+      ),
+      body: PhotoView(
+        imageProvider: NetworkImage(imageUrl),
       ),
     );
   }

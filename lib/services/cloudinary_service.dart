@@ -24,4 +24,20 @@ class CloudinaryService {
       return null;
     }
   }
+
+  static Future<String?> uploadAudio(File audioFile) async {
+    try {
+      final response = await cloudinary.uploadFile(
+        CloudinaryFile.fromFile(
+          audioFile.path,
+          resourceType: CloudinaryResourceType.Video,
+        ),
+      );
+
+      return response.secureUrl;
+    } catch (e) {
+      print("Cloudinary Audio Error: $e");
+      return null;
+    }
+  }
 }

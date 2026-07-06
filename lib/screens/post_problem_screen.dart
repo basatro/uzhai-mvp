@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:just_audio/just_audio.dart'; // STEP 2: Import just_audio
 import '../services/cloudinary_service.dart';
 
 class PostProblemScreen extends StatefulWidget {
@@ -46,11 +49,26 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
 
   bool isUploading = false;
 
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer(); // STEP 3: Create player
+  String? recordedAudioPath;
+  bool isRecording = false;
+
   @override
   void initState() {
     super.initState();
     selectedService = widget.preSelectedService;
     fetchUserLocation();
+  }
+
+  // STEP 6: Dispose controllers and audio players to prevent memory leaks
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    _audioRecorder.dispose();
+    titleController.dispose();
+    descriptionController.dispose();
+    super.dispose();
   }
 
   Future<void> fetchUserLocation() async {
@@ -86,125 +104,189 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
     });
   }
 
-Future<void> postJob() async {
+  // STEP 4: Fixed recordVoice logic with WAV configurations and debug lines
+  Future<void> recordVoice() async {
+    if (isRecording) {
+      final path = await _audioRecorder.stop();
 
-  // Service validation
-  if (selectedService == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Please select a service"),
+      print("Recorded Path: $path");
+
+      final file = File(path!);
+
+      print("Exists: ${file.existsSync()}");
+      print("Size: ${file.lengthSync()} bytes");
+
+      setState(() {
+        isRecording = false;
+        recordedAudioPath = path;
+      });
+
+      return;
+    }
+
+    final permission = await _audioRecorder.hasPermission();
+
+    print("Permission: $permission");
+
+    if (!permission) {
+      print("MIC Permission Denied");
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+
+    final path = "${dir.path}/voice_test.wav";
+
+    await _audioRecorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.wav,
       ),
+      path: path,
     );
-    return;
-  }
 
-  // Title validation
-  if (titleController.text.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Job title is required"),
-      ),
-    );
-    return;
-  }
+    print("Recording Started");
 
-  // Location validation
-  if (location.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Location is required"),
-      ),
-    );
-    return;
-  }
-
-  // Description / Image / Audio validation
-  // For now only description exists
-  // Later replace imageAdded and audioAdded
-  bool imageAdded = selectedImages.isNotEmpty;
-  bool audioAdded = false;
-
-  if (descriptionController.text.trim().isEmpty &&
-      !imageAdded &&
-      !audioAdded) {
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Add Description, Images or Voice Note",
-        ),
-      ),
-    );
-    return;
-  }
-
-  setState(() {
-    isUploading = true;
-  });
-
-  final user = FirebaseAuth.instance.currentUser;
-
-  if (user == null) {
     setState(() {
-      isUploading = false;
+      isRecording = true;
     });
-    return;
   }
 
-  // Upload selected images to Cloudinary
-  List<String> imageUrls = [];
-  for (final image in selectedImages) {
-    final url = await CloudinaryService.uploadImage(image);
-    if (url != null) {
-      imageUrls.add(url);
+  // STEP 5: Playback utility execution logic
+  Future<void> playRecordedAudio() async {
+    if (recordedAudioPath == null) return;
+
+    try {
+      await _audioPlayer.setFilePath(recordedAudioPath!);
+      await _audioPlayer.play();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error playing audio: $e")),
+      );
     }
   }
 
-  final userDoc = await FirebaseFirestore.instance
-      .collection('users')
-      .doc(user.uid)
-      .get();
+  Future<void> postJob() async {
+    // Service validation
+    if (selectedService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please select a service"),
+        ),
+      );
+      return;
+    }
 
-  await FirebaseFirestore.instance
-      .collection('jobs')
-      .add({
+    // Title validation
+    if (titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Job title is required"),
+        ),
+      );
+      return;
+    }
 
-    'customerId': user.uid,
+    // Location validation
+    if (location.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Location is required"),
+        ),
+      );
+      return;
+    }
 
-    'customerName': userDoc['username'],
+    bool imageAdded = selectedImages.isNotEmpty;
+    bool audioAdded = recordedAudioPath != null;
 
-    'category': selectedService,
+    if (descriptionController.text.trim().isEmpty &&
+        !imageAdded &&
+        !audioAdded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Add Description, Images or Voice Note",
+          ),
+        ),
+      );
+      return;
+    }
 
-    'title': titleController.text.trim(),
+    setState(() {
+      isUploading = true;
+    });
 
-    'description': descriptionController.text.trim(),
+    final user = FirebaseAuth.instance.currentUser;
 
-    'images': imageUrls,
+    if (user == null) {
+      setState(() {
+        isUploading = false;
+      });
+      return;
+    }
 
-    'location': location,
+    // Upload selected images to Cloudinary
+    List<String> imageUrls = [];
+    for (final image in selectedImages) {
+      final url = await CloudinaryService.uploadImage(image);
+      if (url != null) {
+        imageUrls.add(url);
+      }
+    }
 
-    'status': 'open',
+    // Upload recorded audio to Cloudinary
+    String audioUrl = "";
+    if (recordedAudioPath != null) {
+      print("Uploading audio...");
+      final uploadedAudio = await CloudinaryService.uploadAudio(
+        File(recordedAudioPath!),
+      );
+      if (uploadedAudio != null) {
+        audioUrl = uploadedAudio;
+      }
+      print(audioUrl);
+    }
 
-    'createdAt': Timestamp.now(),
-  });
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
-  if (!mounted) return;
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .add({
+      'customerId': user.uid,
+      'customerName': userDoc['username'],
+      'category': selectedService,
+      'title': titleController.text.trim(),
+      'description': descriptionController.text.trim(),
+      'images': imageUrls,
+      'audio': audioUrl,
+      'location': location,
+      'status': 'open',
+      'createdAt': Timestamp.now(),
+    });
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text("Job Posted Successfully"),
-    ),
-  );
+    if (!mounted) return;
 
-  selectedImages.clear();
-  uploadedImageUrls.clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Job Posted Successfully"),
+      ),
+    );
 
-  setState(() {
-    isUploading = false;
-  });
+    selectedImages.clear();
+    uploadedImageUrls.clear();
+    recordedAudioPath = null;
 
-  Navigator.pop(context);
-}
+    setState(() {
+      isUploading = false;
+      recordedAudioPath = null;
+      isRecording = false;
+    });
+
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +316,6 @@ Future<void> postJob() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // SERVICE DROPDOWN
             const Text("Select Service", style: _labelStyle),
             const SizedBox(height: 8),
@@ -326,18 +407,54 @@ Future<void> postJob() async {
             const SizedBox(height: 10),
 
             Container(
-              height: 60,
-              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
                 children: [
-                  Icon(Icons.mic),
-                  SizedBox(width: 10),
-                  Text("Record Voice Note"),
+                  IconButton(
+                    onPressed: recordVoice,
+                    icon: Icon(
+                      isRecording ? Icons.stop_circle : Icons.mic,
+                      color: isRecording ? Colors.red : primaryBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isRecording
+                          ? "Recording..."
+                          : recordedAudioPath == null
+                              ? "No Voice Note"
+                              : "Voice Note Ready (Tap ▶ to Listen)", // STEP 8: Show update message
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // STEP 7: Modernized audio playback actions row configuration
+                  if (recordedAudioPath != null) ...[
+                    IconButton(
+                      icon: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.green,
+                      ),
+                      onPressed: playRecordedAudio,
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          recordedAudioPath = null;
+                        });
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
