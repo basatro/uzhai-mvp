@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/technician_bottom_nav.dart';
 import '../screens/role_selection_screen.dart';
+import 'tech_wallet_screen.dart';
 
 // ✅ GLOBAL COLOR (FIXED)
 const Color neonOrange = Color(0xFFFF6B00);
@@ -177,6 +178,23 @@ class _TechProfileScreenState extends State<TechProfileScreen> {
 
                 const SizedBox(height: 24),
 
+                _sectionTitle("Wallet"),
+                _tile(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: "My Wallet",
+                  subtitle: "View Balance & Transactions",
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TechWalletScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
                 _sectionTitle("General"),
 
                 _tile(
@@ -328,6 +346,7 @@ Widget _tile({
   String? subtitle,
   Widget? trailing,
   bool showArrow = true,
+  VoidCallback? onTap,
 }) {
   return Container(
     margin: const EdgeInsets.only(bottom: 8),
@@ -346,7 +365,7 @@ Widget _tile({
           (showArrow
               ? const Icon(Icons.chevron_right, color: Colors.grey)
               : null),
-      onTap: () {},
+      onTap: onTap,
     ),
   );
 }

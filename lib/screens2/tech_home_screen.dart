@@ -6,6 +6,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:just_audio/just_audio.dart';
 import '../widgets/technician_bottom_nav.dart';
 import 'tech_quote_screen.dart';
+import 'tech_wallet_screen.dart';
 
 class TechHomeScreen extends StatefulWidget {
   const TechHomeScreen({super.key});
@@ -45,6 +46,21 @@ class _TechHomeScreenState extends State<TechHomeScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.account_balance_wallet_outlined,
+            color: neonOrange,
+            size: 28,
+          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TechWalletScreen(),
+              ),
+            );
+          },
+        ),
         title: const Text(
           "UZHAI",
           style: TextStyle(
