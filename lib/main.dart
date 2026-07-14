@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'splash_screen.dart';
 import 'screens/role_selection_screen.dart';
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp();
 
-void main() {
   runApp(const UzhaiApp());
 }
 
@@ -14,7 +18,7 @@ class UzhaiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: RoleSelectionScreen(),
+      home: SplashScreen(),
     );
   }
 }

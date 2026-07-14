@@ -1,36 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'customer_signup_screen.dart';
-import 'customer_home_screen.dart';
+import 'customer_password_screen.dart';
 
-class CustomerLoginScreen extends StatefulWidget {
-  const CustomerLoginScreen({super.key});
+class CustomerSignupScreen extends StatefulWidget {
+  const CustomerSignupScreen({super.key});
 
   @override
-  State<CustomerLoginScreen> createState() =>
-      _CustomerLoginScreenState();
+  State<CustomerSignupScreen> createState() => _CustomerSignupScreenState();
 }
 
-class _CustomerLoginScreenState
-    extends State<CustomerLoginScreen> {
+class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
+
+  final TextEditingController usernameController =
+      TextEditingController();
 
   final TextEditingController emailController =
       TextEditingController();
 
-  final TextEditingController passwordController =
+  final TextEditingController phoneController =
+      TextEditingController();
+
+  final TextEditingController locationController =
       TextEditingController();
 
   @override
   void dispose() {
+    usernameController.dispose();
     emailController.dispose();
-    passwordController.dispose();
+    phoneController.dispose();
+    locationController.dispose();
     super.dispose();
   }
 
-  Future<void> loginUser() async {
-
-    if (emailController.text.isEmpty ||
-        passwordController.text.isEmpty) {
+  void goToPasswordScreen() {
+    if (usernameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        phoneController.text.isEmpty ||
+        locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please fill all fields"),
@@ -39,31 +44,17 @@ class _CustomerLoginScreenState
       return;
     }
 
-    try {
-
-      await FirebaseAuth.instance
-          .signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const CustomerHomeScreen(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CustomerPasswordScreen(
+          username: usernameController.text.trim(),
+          email: emailController.text.trim(),
+          phone: phoneController.text.trim(),
+          location: locationController.text.trim(),
         ),
-      );
-
-    } on FirebaseAuthException catch (e) {
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message ?? "Login Failed",
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -80,19 +71,21 @@ class _CustomerLoginScreenState
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Login",
+          "Sign Up",
           style: TextStyle(color: Colors.black),
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
             const Text(
-              "Welcome Back,",
-              style: TextStyle(color: Colors.grey),
+              "Create Your Account",
+              style: TextStyle(
+                color: Colors.grey,
+              ),
             ),
 
             const SizedBox(height: 24),
@@ -100,17 +93,17 @@ class _CustomerLoginScreenState
             Center(
               child: Image.asset(
                 'assets/uzhai_logo.png',
-                height: 200,
+                height: 180,
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 30),
 
+            // Username
             TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
+              controller: usernameController,
               decoration: InputDecoration(
-                hintText: "Enter Email",
+                hintText: "Username",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -122,11 +115,12 @@ class _CustomerLoginScreenState
 
             const SizedBox(height: 16),
 
+            // Email
             TextField(
-              controller: passwordController,
-              obscureText: true,
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Enter Password",
+                hintText: "Email",
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -136,18 +130,54 @@ class _CustomerLoginScreenState
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // Phone
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                hintText: "Phone Number",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Location
+            TextField(
+              controller: locationController,
+              decoration: InputDecoration(
+                hintText: "Location",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
 
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: loginUser,
+                onPressed: goToPasswordScreen,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E88E5),
                 ),
                 child: const Text(
-                  "Login",
+                  "Next",
+                  style: TextStyle(
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),
@@ -160,7 +190,7 @@ class _CustomerLoginScreenState
                 children: [
 
                   const Text(
-                    "Don't have an account? ",
+                    "Already have an account? ",
                     style: TextStyle(
                       color: Colors.grey,
                     ),
@@ -168,16 +198,10 @@ class _CustomerLoginScreenState
 
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const CustomerSignupScreen(),
-                        ),
-                      );
+                      Navigator.pop(context);
                     },
                     child: const Text(
-                      "Sign Up",
+                      "Login",
                       style: TextStyle(
                         color: Color(0xFF1E88E5),
                         fontWeight: FontWeight.bold,

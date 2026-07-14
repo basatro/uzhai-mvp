@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/customer_bottom_nav.dart';
+// ✅ STEP 1 — CustomerQuotesScreen import added
+import 'customer_quotes_screen.dart';
 
 const Color primaryBlue = Color(0xFF1E88E5);
 
@@ -49,7 +53,7 @@ class _CustomerBookedScreenState extends State<CustomerBookedScreen>
           tabs: const [
             Tab(text: "Pending"),
             Tab(text: "Active"),
-            Tab(text: "Completed"),
+            Tab(text: "History"),
             Tab(text: "Cancelled"),
           ],
         ),
@@ -57,11 +61,17 @@ class _CustomerBookedScreenState extends State<CustomerBookedScreen>
 
       body: TabBarView(
         controller: _tabController,
-        children: const [
-          _PendingTab(),
-          _ActiveTab(),
-          _CompletedTab(),
-          _CancelledTab(),
+        children: [
+          const _PendingTab(),
+          _ActiveTab(
+            onCompleted: () {
+              setState(() {
+                _tabController.index = 2;
+              });
+            },
+          ),
+          const _HistoryTab(),
+          const _CancelledTab(),
         ],
       ),
 
@@ -77,20 +87,43 @@ class _PendingTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _JobCard(status: "Pending"),
-        SizedBox(height: 16),
-        Text(
-          "Quotes received",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        SizedBox(height: 12),
-        _QuoteCard(name: "Ramesh", price: "₹450", rating: "4.5"),
-        _QuoteCard(name: "Suresh", price: "₹400", rating: "4.2"),
-        _QuoteCard(name: "Arun", price: "₹480", rating: "4.8"),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'open')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Pending Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job = snapshot.data!.docs[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _PendingJobCard(
+                jobId: job.id,
+                title: job['title'],
+                location: job['location'],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -98,123 +131,122 @@ class _PendingTab extends StatelessWidget {
 //////////////////// ACTIVE ////////////////////
 
 class _ActiveTab extends StatelessWidget {
-  const _ActiveTab();
+  final VoidCallback onCompleted;
+  const _ActiveTab({
+    super.key,
+    required this.onCompleted,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const _JobCard(status: "Active"),
+    final uid = FirebaseAuth.instance.currentUser!.uid;
 
-        const SizedBox(height: 16),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'assigned')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
 
-        const Text(
-          "Technician",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Active Jobs"),
+          );
+        }
 
-        const SizedBox(height: 8),
-
-        Container(
+        return ListView.builder(
           padding: const EdgeInsets.all(16),
-          decoration: _box(),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Ramesh Kumar",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 4),
-              Text("⭐ 4.5  •  Plumber"),
-              SizedBox(height: 8),
-              Text("Today • 3:00 PM – 5:00 PM"),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        // 📞 CALL + 💬 CHAT
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.call),
-                label: const Text("Call"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job = snapshot.data!.docs[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _ActiveJobCard(
+                onCompleted: onCompleted,
+                jobId: job.id,
+                title: job['title'],
+                location: job['location'],
+                technicianId: job['selectedTechnicianId'],
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.chat),
-                label: const Text("Chat"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryBlue,
-                  side: const BorderSide(color: primaryBlue),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // ❌ CANCEL BOOKING
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () {
-              // UI only – later confirmation dialog
-            },
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-            child: const Text(
-              "Cancel Booking",
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 }
 
-//////////////////// COMPLETED ////////////////////
+//////////////////// HISTORY ////////////////////
 
-class _CompletedTab extends StatelessWidget {
-  const _CompletedTab();
+class _HistoryTab extends StatelessWidget {
+  const _HistoryTab();
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _HistoryCard(
-          service: "Plumber",
-          name: "Ramesh",
-          date: "12 Sep 2025",
-          amount: "₹450",
-          status: "Completed",
-        ),
-      ],
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      // ✅ STEP 1 — orderBy() removed (it requires a composite index
+      // and was silently causing the stream to error out/hang).
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        // ✅ STEP 2 — Show Firestore errors instead of a blank screen.
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              snapshot.error.toString(),
+              textAlign: TextAlign.center,
+            ),
+          );
+        }
+
+        // ✅ STEP 3 — Handle empty history.
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Completed Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final job =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            // ✅ STEP 8 — Print every history job for debugging.
+            print(job);
+
+            return _HistoryCard(
+              name: job['title'] ?? "",
+              amount: job['amount'] != null ? "₹${job['amount']}" : "",
+              status: "Completed",
+              date: job['completedAt'] != null
+                  ? (job['completedAt'] as Timestamp)
+                      .toDate()
+                      .toString()
+                      .substring(0, 10)
+                  : "",
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -226,26 +258,69 @@ class _CancelledTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _HistoryCard(
-          service: "Electrician",
-          name: "Suresh",
-          date: "10 Sep 2025",
-          amount: "—",
-          status: "Cancelled",
-        ),
-      ],
+
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'cancelled')
+          .snapshots(),
+
+      builder: (context, snapshot) {
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text("No Cancelled Jobs"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+
+            final data =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            return _HistoryCard(
+              name: data['title'] ?? "",
+              date: "",
+              amount: "",
+              status: "Cancelled",
+              cancelledBy: data['cancelledBy'] ?? "",
+              cancelledTechnicianName:
+                  data['cancelledTechnicianName'] ?? "",
+              cancelReason: data['cancelReason'] ?? "",
+            );
+
+          },
+        );
+      },
     );
   }
 }
 
 //////////////////// REUSABLE ////////////////////
 
-class _JobCard extends StatelessWidget {
-  final String status;
-  const _JobCard({required this.status});
+class _PendingJobCard extends StatelessWidget {
+  final String jobId;
+  final String title;
+  final String location;
+
+  const _PendingJobCard({
+    super.key,
+    required this.jobId,
+    required this.title,
+    required this.location,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -255,18 +330,54 @@ class _JobCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Plumber • Kitchen tap leakage",
-            style: TextStyle(fontWeight: FontWeight.bold),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
-          const Text("Today • 3:00 PM – 5:00 PM"),
+          Text(location),
           const SizedBox(height: 6),
-          Text(
-            status,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: primaryBlue,
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('quotes')
+                .where('jobId', isEqualTo: jobId)
+                .get(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Text("Loading...");
+              }
+              return Text(
+                "${snapshot.data!.docs.length} Quotes Received",
+                style: const TextStyle(
+                  color: primaryBlue,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CustomerQuotesScreen(
+                      jobId: jobId,
+                      title: title,
+                      location: location,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+              ),
+              child: const Text(
+                "View Quotes",
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -275,70 +386,365 @@ class _JobCard extends StatelessWidget {
   }
 }
 
-class _QuoteCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final String rating;
+class _ActiveJobCard extends StatelessWidget {
+  final String jobId;
+  final String title;
+  final String location;
+  final String technicianId;
+  final VoidCallback onCompleted;
 
-  const _QuoteCard({
-    required this.name,
-    required this.price,
-    required this.rating,
+  const _ActiveJobCard({
+    super.key,
+    required this.jobId,
+    required this.title,
+    required this.location,
+    required this.technicianId,
+    required this.onCompleted,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(technicianId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox();
+        }
+
+        final tech = snapshot.data!.data() as Map<String, dynamic>;
+        final username = tech['username'] ?? "Unknown Technician";
+        final specialization = tech['specialization'] ?? "Technician";
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _box(),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text("⭐ $rating"),
-            ],
-          ),
-          Column(
-            children: [
               Text(
-                price,
+                title,
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 6),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  minimumSize: const Size(80, 32),
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: const Text("Select"),
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(location),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                "Assigned Technician",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                username,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(specialization),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    // TODO : Call Technician
+                  },
+                  icon: const Icon(
+                    Icons.call,
+                    color: Colors.white,
+                  ),
+                  label: const Text(
+                    "Call",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final confirm = await showCompleteJobDialog(context);
+                    if (confirm != true) return;
+
+                    final jobRef = FirebaseFirestore.instance
+                        .collection('jobs')
+                        .doc(jobId);
+
+                    final jobSnapshot = await jobRef.get();
+                    final selectedQuoteId = jobSnapshot['selectedQuoteId'];
+
+                    // Fetch the quote (if any) so we can store its
+                    // amount on the job when marking it completed.
+                    final quote = selectedQuoteId != null
+                        ? await FirebaseFirestore.instance
+                            .collection('quotes')
+                            .doc(selectedQuoteId)
+                            .get()
+                        : null;
+
+                    await jobRef.update({
+                      'status': 'completed',
+                      'completedAt': Timestamp.now(),
+                      if (quote != null && quote.exists)
+                        'amount': quote['amount'],
+                    });
+
+                    // ✅ STEP 4 — Verify the Firestore update actually
+                    // applied by re-fetching and printing the job.
+                    final updatedJob = await jobRef.get();
+                    print(updatedJob.data());
+
+                    // ✅ STEP 5 — Update the quote safely, only if a
+                    // selectedQuoteId actually exists.
+                    if (selectedQuoteId != null) {
+                      await FirebaseFirestore.instance
+                          .collection('quotes')
+                          .doc(selectedQuoteId)
+                          .update({
+                        'status': 'completed',
+                        'completedAt': Timestamp.now(),
+                      });
+                    }
+
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          "Job Completed Successfully",
+                        ),
+                      ),
+                    );
+
+                    await Future.delayed(
+                      const Duration(milliseconds: 300),
+                    );
+
+                    onCompleted();
+                  },
+                  icon: const Icon(
+                    Icons.check_circle_outline,
+                    color: primaryBlue,
+                  ),
+                  label: const Text(
+                    "Complete Job",
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: primaryBlue,
+                      width: 1.5,
+                    ),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () async {
+
+                    final controller = TextEditingController();
+
+                    final confirm = await showCustomerCancelDialog(
+                      context,
+                      controller,
+                    );
+
+                    if (confirm != true) return;
+
+                    final jobRef = FirebaseFirestore.instance
+                        .collection('jobs')
+                        .doc(jobId);
+
+                    final batch = FirebaseFirestore.instance.batch();
+
+                    final quotes = await FirebaseFirestore.instance
+                        .collection('quotes')
+                        .where('jobId', isEqualTo: jobId)
+                        .get();
+
+                    for (final doc in quotes.docs) {
+                      batch.delete(doc.reference);
+                    }
+
+                    batch.delete(jobRef);
+
+                    await batch.commit();
+
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Booking Cancelled"),
+                      ),
+                    );
+
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: Colors.red,
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel Booking",
+                    style: TextStyle(
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
+//////////////////// CUSTOMER CANCEL DIALOG ////////////////////
+
+Future<bool?> showCustomerCancelDialog(
+  BuildContext context,
+  TextEditingController controller,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Cancel Booking"),
+
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+
+          const Text("Reason (Optional)"),
+
+          const SizedBox(height: 10),
+
+          TextField(
+            controller: controller,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+            ),
+          ),
+
+        ],
+      ),
+
+      actions: [
+
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Back"),
+        ),
+
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            "Cancel Booking",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+
+      ],
+    ),
+  );
+}
+
+//////////////////// COMPLETE JOB DIALOG ////////////////////
+
+Future<bool?> showCompleteJobDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Complete Job"),
+      content: const Text(
+        "Are you sure the technician has completed the work?",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("No"),
+        ),
+        // ✅ STEP 6 — Complete button color changed to primaryBlue.
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryBlue,
+          ),
+          child: const Text(
+            "Complete",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _HistoryCard extends StatelessWidget {
-  final String service;
   final String name;
   final String date;
   final String amount;
   final String status;
+  final String? cancelledBy;
+  final String? cancelledTechnicianName;
+  final String? cancelReason;
 
   const _HistoryCard({
-    required this.service,
     required this.name,
     required this.date,
     required this.amount,
     required this.status,
+    this.cancelledBy,
+    this.cancelledTechnicianName,
+    this.cancelReason,
   });
 
   @override
@@ -351,21 +757,67 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "$service • $name",
+            name,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Text(date),
+          if (amount.isNotEmpty) Text(amount),
+          if (status == "Completed") ...[
+            const SizedBox(height: 8),
+            const Text("⭐⭐⭐⭐⭐ 4.8"),
+          ],
           const SizedBox(height: 4),
-          Text(amount),
+          if (date.isNotEmpty)
+            Text(
+              status == "Completed" ? "Completed on $date" : date,
+            ),
           const SizedBox(height: 6),
           Text(
             status,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: status == "Completed" ? Colors.green : Colors.red,
+              // ✅ STEP 7 — Completed status now shown in primaryBlue.
+              color: status == "Completed" ? primaryBlue : Colors.red,
             ),
           ),
+          if (status == "Cancelled" && cancelledBy != null) ...[
+            const SizedBox(height: 8),
+
+            const Text(
+              "Cancelled By",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            Text(cancelledBy!),
+
+            if (cancelledBy == "Technician" &&
+                cancelledTechnicianName != null &&
+                cancelledTechnicianName!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                "Technician",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                cancelledTechnicianName ?? "",
+              ),
+            ],
+
+            if ((cancelReason ?? "").trim().isNotEmpty) ...[
+
+              const SizedBox(height: 8),
+
+              const Text(
+                "Reason",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+
+              Text(cancelReason!),
+
+            ],
+          ],
         ],
       ),
     );

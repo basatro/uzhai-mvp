@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:just_audio/just_audio.dart'; // STEP 2: Import just_audio
+import '../services/cloudinary_service.dart';
 
 class PostProblemScreen extends StatefulWidget {
   final String? preSelectedService;
@@ -30,16 +38,254 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
   ];
 
   String? selectedService;
-  bool asap = true;
 
-  DateTime? selectedDate;
-  String selectedSlot = "Morning";
-  TimeOfDay? selectedTime;
+  final titleController = TextEditingController();
+  final descriptionController = TextEditingController();
+  String location = "";
+
+  final ImagePicker _picker = ImagePicker();
+  List<File> selectedImages = [];
+  List<String> uploadedImageUrls = [];
+
+  bool isUploading = false;
+
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer(); // STEP 3: Create player
+  String? recordedAudioPath;
+  bool isRecording = false;
 
   @override
   void initState() {
     super.initState();
     selectedService = widget.preSelectedService;
+    fetchUserLocation();
+  }
+
+  // STEP 6: Dispose controllers and audio players to prevent memory leaks
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    _audioRecorder.dispose();
+    titleController.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> fetchUserLocation() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists) {
+      setState(() {
+        location = doc['location'] ?? "";
+      });
+    }
+  }
+
+  Future<void> pickImages() async {
+    if (selectedImages.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Maximum 3 images allowed"),
+        ),
+      );
+      return;
+    }
+    final XFile? image =
+        await _picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    setState(() {
+      selectedImages.add(File(image.path));
+    });
+  }
+
+  // STEP 4: Fixed recordVoice logic with WAV configurations and debug lines
+  Future<void> recordVoice() async {
+    if (isRecording) {
+      final path = await _audioRecorder.stop();
+
+      print("Recorded Path: $path");
+
+      final file = File(path!);
+
+      print("Exists: ${file.existsSync()}");
+      print("Size: ${file.lengthSync()} bytes");
+
+      setState(() {
+        isRecording = false;
+        recordedAudioPath = path;
+      });
+
+      return;
+    }
+
+    final permission = await _audioRecorder.hasPermission();
+
+    print("Permission: $permission");
+
+    if (!permission) {
+      print("MIC Permission Denied");
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+
+    final path = "${dir.path}/voice_test.wav";
+
+    await _audioRecorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.wav,
+      ),
+      path: path,
+    );
+
+    print("Recording Started");
+
+    setState(() {
+      isRecording = true;
+    });
+  }
+
+  // STEP 5: Playback utility execution logic
+  Future<void> playRecordedAudio() async {
+    if (recordedAudioPath == null) return;
+
+    try {
+      await _audioPlayer.setFilePath(recordedAudioPath!);
+      await _audioPlayer.play();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error playing audio: $e")),
+      );
+    }
+  }
+
+  Future<void> postJob() async {
+    // Service validation
+    if (selectedService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please select a service"),
+        ),
+      );
+      return;
+    }
+
+    // Title validation
+    if (titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Job title is required"),
+        ),
+      );
+      return;
+    }
+
+    // Location validation
+    if (location.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Location is required"),
+        ),
+      );
+      return;
+    }
+
+    bool imageAdded = selectedImages.isNotEmpty;
+    bool audioAdded = recordedAudioPath != null;
+
+    if (descriptionController.text.trim().isEmpty &&
+        !imageAdded &&
+        !audioAdded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Add Description, Images or Voice Note",
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      isUploading = true;
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      setState(() {
+        isUploading = false;
+      });
+      return;
+    }
+
+    // Upload selected images to Cloudinary
+    List<String> imageUrls = [];
+    for (final image in selectedImages) {
+      final url = await CloudinaryService.uploadImage(image);
+      if (url != null) {
+        imageUrls.add(url);
+      }
+    }
+
+    // Upload recorded audio to Cloudinary
+    String audioUrl = "";
+    if (recordedAudioPath != null) {
+      print("Uploading audio...");
+      final uploadedAudio = await CloudinaryService.uploadAudio(
+        File(recordedAudioPath!),
+      );
+      if (uploadedAudio != null) {
+        audioUrl = uploadedAudio;
+      }
+      print(audioUrl);
+    }
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .add({
+      'customerId': user.uid,
+      'customerName': userDoc['username'],
+      'category': selectedService,
+      'title': titleController.text.trim(),
+      'description': descriptionController.text.trim(),
+      'images': imageUrls,
+      'audio': audioUrl,
+      'location': location,
+      'status': 'open',
+      'createdAt': Timestamp.now(),
+    });
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Job Posted Successfully"),
+      ),
+    );
+
+    selectedImages.clear();
+    uploadedImageUrls.clear();
+    recordedAudioPath = null;
+
+    setState(() {
+      isUploading = false;
+      recordedAudioPath = null;
+      isRecording = false;
+    });
+
+    Navigator.pop(context);
   }
 
   @override
@@ -70,7 +316,6 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // SERVICE DROPDOWN
             const Text("Select Service", style: _labelStyle),
             const SizedBox(height: 8),
@@ -92,239 +337,224 @@ class _PostProblemScreenState extends State<PostProblemScreen> {
 
             const SizedBox(height: 24),
 
+            // JOB TITLE
+            const Text("Job Title", style: _labelStyle),
+            const SizedBox(height: 8),
+
+            TextField(
+              controller: titleController,
+              decoration: _inputDecoration.copyWith(
+                hintText: "Eg: Fan Not Working",
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
             // DESCRIPTION
             const Text("Describe your problem", style: _labelStyle),
             const SizedBox(height: 8),
 
             TextField(
+              controller: descriptionController,
               maxLines: 4,
               decoration: _inputDecoration.copyWith(
-                hintText:
-                    "Eg: Kitchen tap is leaking continuously since morning...",
+                hintText: "Describe the issue in detail...",
               ),
             ),
 
             const SizedBox(height: 24),
 
             // IMAGES
-            const Text("Attach images (optional)", style: _labelStyle),
+            const Text("Attach Images", style: _labelStyle),
             const SizedBox(height: 12),
 
             Row(
               children: List.generate(
-                4,
-                (i) => Container(
-                  margin: const EdgeInsets.only(right: 10),
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.grey,
+                3,
+                (i) => GestureDetector(
+                  onTap: pickImages,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                    child: i < selectedImages.length
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              selectedImages[i],
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.add_a_photo,
+                            color: Colors.grey,
+                          ),
                   ),
                 ),
               ),
             ),
 
-            const SizedBox(height: 28),
+            // VOICE NOTE
+            const SizedBox(height: 24),
 
-            // TIME MODE
-            const Text("Preferred Time", style: _labelStyle),
-            const SizedBox(height: 12),
+            const Text("Voice Note", style: _labelStyle),
+            const SizedBox(height: 10),
 
-            Row(
-              children: [
-                _choiceChip("As soon as possible", asap, () {
-                  setState(() => asap = true);
-                }),
-                const SizedBox(width: 12),
-                _choiceChip("Schedule", !asap, () {
-                  setState(() => asap = false);
-                }),
-              ],
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: recordVoice,
+                    icon: Icon(
+                      isRecording ? Icons.stop_circle : Icons.mic,
+                      color: isRecording ? Colors.red : primaryBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isRecording
+                          ? "Recording..."
+                          : recordedAudioPath == null
+                              ? "No Voice Note"
+                              : "Voice Note Ready (Tap ▶ to Listen)", // STEP 8: Show update message
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // STEP 7: Modernized audio playback actions row configuration
+                  if (recordedAudioPath != null) ...[
+                    IconButton(
+                      icon: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.green,
+                      ),
+                      onPressed: playRecordedAudio,
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          recordedAudioPath = null;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
             ),
 
-            if (!asap) ...[
-              const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-              // DATE
-              const Text("Select Date", style: _labelStyle),
-              const SizedBox(height: 10),
+            // SERVICE LOCATION
+            const Text("Service Location", style: _labelStyle),
+            const SizedBox(height: 8),
 
-              Row(
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
                 children: [
-                  _dateChip("Today", DateTime.now()),
+                  const Icon(Icons.location_on, color: primaryBlue),
                   const SizedBox(width: 8),
-                  _dateChip(
-                    "Tomorrow",
-                    DateTime.now().add(const Duration(days: 1)),
+                  Expanded(
+                    child: Text(
+                      location.isEmpty ? "Loading..." : location,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  _pickDateChip(),
+                  TextButton(
+                    onPressed: () async {
+                      final controller = TextEditingController(text: location);
+                      final newLocation = await showDialog<String>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Change Location"),
+                          content: TextField(
+                            controller: controller,
+                            decoration: const InputDecoration(
+                              hintText: "Enter location",
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () =>
+                                  Navigator.pop(context, controller.text),
+                              child: const Text("Save"),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (newLocation != null && newLocation.isNotEmpty) {
+                        setState(() {
+                          location = newLocation;
+                        });
+                      }
+                    },
+                    child: const Text("Change"),
+                  ),
                 ],
               ),
-
-              const SizedBox(height: 24),
-
-              // TIME SLOT
-              const Text("Select Time", style: _labelStyle),
-              const SizedBox(height: 10),
-
-              Wrap(
-                spacing: 10,
-                children: [
-                  _slotChip("Morning (8–12)"),
-                  _slotChip("Afternoon (12–4)"),
-                  _slotChip("Evening (4–8)"),
-                  _exactTimeChip(),
-                ],
-              ),
-            ],
+            ),
 
             const SizedBox(height: 36),
 
-            // CONFIRM
+            // POST JOB BUTTON
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+                onPressed: isUploading ? null : postJob,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryBlue,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(26),
                   ),
                 ),
-                child: const Text(
-                  "Confirm Booking",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                child: isUploading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text(
+                        "Post Job",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
 
-            const SizedBox(height: 12),
-
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Cancel"),
-              ),
-            ),
+            const SizedBox(height: 80),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ---------------- HELPERS ----------------
-
-  Widget _choiceChip(String text, bool active, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? primaryBlue : Colors.white,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: primaryBlue),
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: active ? Colors.white : primaryBlue,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dateChip(String text, DateTime date) {
-    final bool active =
-        selectedDate != null &&
-        selectedDate!.day == date.day &&
-        selectedDate!.month == date.month;
-
-    return GestureDetector(
-      onTap: () => setState(() => selectedDate = date),
-      child: _chipBox(text, active),
-    );
-  }
-
-  Widget _pickDateChip() {
-    return GestureDetector(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime.now(),
-          lastDate: DateTime.now().add(const Duration(days: 30)),
-        );
-        if (picked != null) {
-          setState(() => selectedDate = picked);
-        }
-      },
-      child: _chipBox("Pick date", false),
-    );
-  }
-
-  Widget _slotChip(String text) {
-    final active = selectedSlot == text && selectedTime == null;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedSlot = text;
-          selectedTime = null;
-        });
-      },
-      child: _chipBox(text, active),
-    );
-  }
-
-  Widget _exactTimeChip() {
-    return GestureDetector(
-      onTap: () async {
-        final picked = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.now(),
-        );
-        if (picked != null) {
-          setState(() => selectedTime = picked);
-        }
-      },
-      child: _chipBox(
-        selectedTime == null
-            ? "Pick exact time"
-            : selectedTime!.format(context),
-        selectedTime != null,
-      ),
-    );
-  }
-
-  Widget _chipBox(String text, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: active ? primaryBlue : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: active ? Colors.white : Colors.black,
-          fontSize: 13,
         ),
       ),
     );
@@ -344,10 +574,10 @@ final InputDecoration _inputDecoration = InputDecoration(
   fillColor: Colors.white,
   enabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
-    borderSide: BorderSide(color: Color(0xFFE0E0E0)),
+    borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
   ),
   focusedBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
-    borderSide: BorderSide(color: Color(0xFF1E88E5), width: 2),
+    borderSide: const BorderSide(color: Color(0xFF1E88E5), width: 2),
   ),
 );
